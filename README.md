@@ -5,7 +5,8 @@ Minimal API that proves Playwright Chromium works inside a container.
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) — Windows install: `winget install Microsoft.DotNet.SDK.10`
-- [PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows) (pwsh) — required to run the Playwright browser installer
+- [PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows) (pwsh) — needed to run `playwright.ps1`; install with `winget install Microsoft.PowerShell`
+  - **Alternative (no pwsh required):** the NuGet package bundles `node.exe` — see the install step below
 - Docker Desktop (for container builds)
 - [Railway CLI](https://docs.railway.app/develop/cli) (for deployment)
 
@@ -16,7 +17,13 @@ Minimal API that proves Playwright Chromium works inside a container.
 dotnet build
 
 # 2. Install Playwright's Chromium browser (one-time)
+# Option A — if pwsh (PowerShell 7+) is installed:
 pwsh src/SiteWatch.Api/bin/Debug/net10.0/playwright.ps1 install chromium
+
+# Option B — no pwsh required (uses node.exe bundled in the NuGet package):
+$node = "$env:USERPROFILE\.nuget\packages\microsoft.playwright\1.61.0\.playwright\node\win32_x64\node.exe"
+$cli  = "$env:USERPROFILE\.nuget\packages\microsoft.playwright\1.61.0\.playwright\package\cli.js"
+& $node $cli install chromium
 
 # 3. Run
 dotnet run --project src/SiteWatch.Api
