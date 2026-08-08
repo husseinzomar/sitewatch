@@ -300,7 +300,7 @@ if (app.Environment.IsDevelopment())
 {
     // Temporary: manual trigger for testing checks before Hangfire scheduling
     // exists (Day 7). Remove this endpoint then.
-    app.MapPost("/sites/{id:guid}/run-check", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, ICheckRunner checkRunner, CancellationToken ct) =>
+    app.MapPost("/sites/{id:guid}/run-check", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, ICheckRunner checkRunner, CancellationToken ct, CheckType type = CheckType.PageLoad) =>
     {
         if (!TryGetUserId(user, out var userId))
         {
@@ -313,7 +313,7 @@ if (app.Environment.IsDevelopment())
             return Results.NotFound();
         }
 
-        var outcome = await checkRunner.RunAsync(site, CheckType.PageLoad, ct);
+        var outcome = await checkRunner.RunAsync(site, type, ct);
         return Results.Ok(outcome);
     })
     .RequireAuthorization();

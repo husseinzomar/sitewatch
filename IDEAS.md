@@ -12,3 +12,10 @@
   JsonStringEnumConverter so clients see "Passed"/"Failed" instead of
   0/1. DB storage stays int.
 
+## Parked from Day 6
+- Login failure reports "login form was not found" when credentials
+  were actually rejected; detect the site's error banner instead
+- DescribeFailure doesn't map net:: error codes (e.g. ERR_EMPTY_RESPONSE);
+  raw Chromium text leaks into alert messages
+- Untested: a site that hangs until the per-operation timeout
+

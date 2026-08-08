@@ -32,6 +32,11 @@ argument. Never commit the value; never print it in chat or logs.
   `email` → `ClaimTypes.Email`, etc). `MapInboundClaims = false` is
   required on `JwtBearerOptions`, or `FindFirstValue(JwtRegisteredClaimNames.Sub)`
   and `.Email` silently return null instead of erroring.
+- Playwright timeouts (navigation, `WaitForURLAsync`, locator actions)
+  throw `System.TimeoutException`, not `Microsoft.Playwright.PlaywrightException`
+  — verified against the installed 1.61.0 assembly. Both must be caught,
+  or a genuinely-Failed check (site down, login rejected) gets
+  misclassified as Error.
 
 ## Status
 Day 1 done: scaffold, GitHub push, Railway deploy verified in production
@@ -49,5 +54,10 @@ singleton browser, per-check context, 30s total budget with a 20s
 per-operation cap, Failed/Error split by failure location, screenshots
 on failure only. Temporary POST /sites/{id}/run-check (dev-only) for
 manual testing until Hangfire lands.
-Next: Day 6 — checkout flow scenario (browse -> add to cart -> reach
-checkout page).
+Day 6 done: CheckType.CheckoutFlow against saucedemo.com (hardcoded
+target, ignores Site.Url), step-named Failed messages, shared
+ExecuteAsync wrapper with PageLoad, TimeoutException classification fix
+applied to both scenarios. run-check now takes ?type= (defaults to
+PageLoad).
+Next: Day 7 — Hangfire scheduling + persisting CheckResult rows
+(replaces the temporary run-check endpoint).

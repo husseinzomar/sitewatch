@@ -35,9 +35,9 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Capture screenshot, store path + status + duration
 
 ### Day 6 — Checkout flow scenario
-- [ ] Browse -> add to cart -> reach checkout page
-- [ ] Passes against a real demo store
-- [ ] Failure produces a useful error message, not a stack trace
+- [x] Browse -> add to cart -> reach checkout page
+- [x] Passes against a real demo store
+- [x] Failure produces a useful error message, not a stack trace
 
 ### Day 7 — Scheduling
 - [ ] Hangfire + Postgres storage
