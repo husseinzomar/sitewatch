@@ -1,5 +1,7 @@
 # SiteWatch — 14 Day Plan
 
+Live: https://sitewatch-production-4647.up.railway.app
+
 Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 
 ## Week 1 — Backend works
@@ -9,9 +11,9 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Dockerfile (playwright noble image, pwuser, PORT-aware)
 - [x] /health + /browser-check verified locally
 - [x] git init + first commit
-- [ ] Push to GitHub
-- [ ] docker build + local container test
-- [ ] Deploy to Railway, public URL returns Example Domain
+- [x] Push to GitHub
+- [x] docker build + local container test (built by Railway, not locally — Docker Desktop is not installed on this machine)
+- [x] Deploy to Railway, public URL returns Example Domain
 
 ### Day 2 — Database
 - [ ] Neon Postgres project created, connection string in Railway vars
