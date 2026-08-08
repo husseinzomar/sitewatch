@@ -27,6 +27,7 @@ var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "sitewatch";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -93,28 +94,28 @@ app.MapPost("/auth/register", async (RegisterRequest request, SiteWatchDbContext
 {
     if (!TryNormalizeEmail(request.Email, out var email))
     {
-        return Results.BadRequest(new { error = "Invalid email format." });
+        return Results.BadRequest(new ErrorResponse("Invalid email format."));
     }
 
     if (email.Length > MaxEmailLength)
     {
-        return Results.BadRequest(new { error = $"Email must be at most {MaxEmailLength} characters." });
+        return Results.BadRequest(new ErrorResponse($"Email must be at most {MaxEmailLength} characters."));
     }
 
     if (request.Password.Length < MinPasswordLength)
     {
-        return Results.BadRequest(new { error = $"Password must be at least {MinPasswordLength} characters." });
+        return Results.BadRequest(new ErrorResponse($"Password must be at least {MinPasswordLength} characters."));
     }
 
     if (Encoding.UTF8.GetByteCount(request.Password) > MaxPasswordBytes)
     {
-        return Results.BadRequest(new { error = $"Password must be at most {MaxPasswordBytes} bytes." });
+        return Results.BadRequest(new ErrorResponse($"Password must be at most {MaxPasswordBytes} bytes."));
     }
 
     var exists = await db.Users.AnyAsync(u => u.Email == email);
     if (exists)
     {
-        return Results.Conflict(new { error = "Email is already registered." });
+        return Results.Conflict(new ErrorResponse("Email is already registered."));
     }
 
     var user = new User
@@ -128,8 +129,11 @@ app.MapPost("/auth/register", async (RegisterRequest request, SiteWatchDbContext
     db.Users.Add(user);
     await db.SaveChangesAsync();
 
-    return Results.Created($"/users/{user.Id}", new { id = user.Id });
-});
+    return Results.Created($"/users/{user.Id}", new RegisterResponse(user.Id));
+})
+.Produces<RegisterResponse>(StatusCodes.Status201Created)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+.Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
 app.MapPost("/auth/login", async (LoginRequest request, SiteWatchDbContext db, IPasswordHasher hasher) =>
 {
@@ -161,15 +165,133 @@ app.MapPost("/auth/login", async (LoginRequest request, SiteWatchDbContext db, I
         expires: DateTime.UtcNow.AddHours(1),
         signingCredentials: credentials);
 
-    return Results.Ok(new { token = new JwtSecurityTokenHandler().WriteToken(token) });
-});
+    return Results.Ok(new LoginResponse(new JwtSecurityTokenHandler().WriteToken(token)));
+})
+.Produces<LoginResponse>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status401Unauthorized);
 
 app.MapGet("/me", (ClaimsPrincipal user) =>
 {
-    var id = user.FindFirstValue(JwtRegisteredClaimNames.Sub);
-    var email = user.FindFirstValue(JwtRegisteredClaimNames.Email);
-    return Results.Ok(new { id, email });
-}).RequireAuthorization();
+    if (!TryGetUserId(user, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var email = user.FindFirstValue(JwtRegisteredClaimNames.Email) ?? string.Empty;
+    return Results.Ok(new MeResponse(userId, email));
+})
+.RequireAuthorization()
+.Produces<MeResponse>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status401Unauthorized);
+
+const int MaxSiteNameLength = 200;
+const int MaxSiteUrlLength = 2048;
+
+app.MapPost("/sites", async (CreateSiteRequest request, ClaimsPrincipal user, SiteWatchDbContext db) =>
+{
+    if (!TryGetUserId(user, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > MaxSiteNameLength)
+    {
+        return Results.BadRequest(new ErrorResponse($"Name is required and must be at most {MaxSiteNameLength} characters."));
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Url) || request.Url.Length > MaxSiteUrlLength)
+    {
+        return Results.BadRequest(new ErrorResponse($"Url is required and must be at most {MaxSiteUrlLength} characters."));
+    }
+
+    if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
+        (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+    {
+        return Results.BadRequest(new ErrorResponse("Url must be an absolute http or https URI."));
+    }
+
+    var site = new Site
+    {
+        Id = Guid.NewGuid(),
+        UserId = userId,
+        Name = request.Name,
+        Url = request.Url,
+        IsActive = request.IsActive ?? true,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
+
+    db.Sites.Add(site);
+    await db.SaveChangesAsync();
+
+    return Results.Created(
+        $"/sites/{site.Id}",
+        new SiteResponse(site.Id, site.Name, site.Url, site.IsActive, site.CreatedAt));
+})
+.RequireAuthorization()
+.Produces<SiteResponse>(StatusCodes.Status201Created)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+.Produces(StatusCodes.Status401Unauthorized);
+
+app.MapGet("/sites", async (ClaimsPrincipal user, SiteWatchDbContext db) =>
+{
+    if (!TryGetUserId(user, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var sites = await db.Sites
+        .Where(s => s.UserId == userId)
+        .Select(s => new SiteResponse(s.Id, s.Name, s.Url, s.IsActive, s.CreatedAt))
+        .ToListAsync();
+
+    return Results.Ok(sites);
+})
+.RequireAuthorization()
+.Produces<List<SiteResponse>>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status401Unauthorized);
+
+app.MapGet("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db) =>
+{
+    if (!TryGetUserId(user, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var site = await db.Sites.SingleOrDefaultAsync(s => s.Id == id && s.UserId == userId);
+    if (site is null)
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(new SiteResponse(site.Id, site.Name, site.Url, site.IsActive, site.CreatedAt));
+})
+.RequireAuthorization()
+.Produces<SiteResponse>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound)
+.Produces(StatusCodes.Status401Unauthorized);
+
+app.MapDelete("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db) =>
+{
+    if (!TryGetUserId(user, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var site = await db.Sites.SingleOrDefaultAsync(s => s.Id == id && s.UserId == userId);
+    if (site is null)
+    {
+        return Results.NotFound();
+    }
+
+    db.Sites.Remove(site);
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+})
+.RequireAuthorization()
+.Produces(StatusCodes.Status204NoContent)
+.Produces(StatusCodes.Status404NotFound)
+.Produces(StatusCodes.Status401Unauthorized);
 
 app.Run();
 
@@ -193,5 +315,18 @@ static bool TryNormalizeEmail(string email, out string normalized)
     }
 }
 
+static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
+{
+    var sub = user.FindFirstValue(JwtRegisteredClaimNames.Sub);
+    return Guid.TryParse(sub, out userId);
+}
+
 record RegisterRequest(string Email, string Password);
 record LoginRequest(string Email, string Password);
+record CreateSiteRequest(string Name, string Url, bool? IsActive);
+
+record ErrorResponse(string Error);
+record RegisterResponse(Guid Id);
+record LoginResponse(string Token);
+record MeResponse(Guid Id, string Email);
+record SiteResponse(Guid Id, string Name, string Url, bool IsActive, DateTimeOffset CreatedAt);

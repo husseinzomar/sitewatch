@@ -27,6 +27,12 @@ Set it by editing `secrets.json` directly (find the path via
 value at every semicolon when passed as a `dotnet user-secrets set`
 argument. Never commit the value; never print it in chat or logs.
 
+## Gotchas
+- JwtBearer remaps inbound claims by default (`sub` → `ClaimTypes.NameIdentifier`,
+  `email` → `ClaimTypes.Email`, etc). `MapInboundClaims = false` is
+  required on `JwtBearerOptions`, or `FindFirstValue(JwtRegisteredClaimNames.Sub)`
+  and `.Email` silently return null instead of erroring.
+
 ## Status
 Day 1 done: scaffold, GitHub push, Railway deploy verified in production
 (https://sitewatch-production-4647.up.railway.app).
@@ -35,5 +41,8 @@ CheckResult) + InitialCreate migration applied to Neon.
 Day 3 done: register/login endpoints, BCrypt password hashing, JWT
 issuing and validation, /me protected endpoint, Swagger with Bearer
 auth (dev-only).
-Next: Day 4 — Sites CRUD (POST/GET/DELETE /sites, scoped to the
-authenticated user).
+Day 4 done: Sites CRUD (POST/GET/DELETE /sites, GET /sites/{id}),
+ownership-scoped to the authenticated user, 404 not 403 for non-owned
+sites, verified with two separate users.
+Next: Day 5 — first Playwright scenario in Infra (open URL, assert
+page loaded, capture screenshot).

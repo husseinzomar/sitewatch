@@ -27,8 +27,8 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Protected endpoint returns 401 without token
 
 ### Day 4 — Sites CRUD
-- [ ] POST /sites, GET /sites, DELETE /sites/{id}
-- [ ] Scoped to the authenticated user only
+- [x] POST /sites, GET /sites, DELETE /sites/{id}
+- [x] Scoped to the authenticated user only
 
 ### Day 5 — First Playwright scenario
 - [ ] Runner service in Infra: open URL, assert page loaded
