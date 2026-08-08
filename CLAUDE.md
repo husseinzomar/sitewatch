@@ -32,4 +32,8 @@ Day 1 done: scaffold, GitHub push, Railway deploy verified in production
 (https://sitewatch-production-4647.up.railway.app).
 Day 2 done: Neon Postgres + EF Core model (User, Site, Check,
 CheckResult) + InitialCreate migration applied to Neon.
-Next: Day 3 — Auth (register/login, password hashing, JWT).
+Day 3 done: register/login endpoints, BCrypt password hashing, JWT
+issuing and validation, /me protected endpoint, Swagger with Bearer
+auth (dev-only).
+Next: Day 4 — Sites CRUD (POST/GET/DELETE /sites, scoped to the
+authenticated user).

@@ -22,9 +22,9 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [ ] First migration applied to Neon
 
 ### Day 3 — Auth
-- [ ] Register + login endpoints, password hashing
-- [ ] JWT issuing and validation
-- [ ] Protected endpoint returns 401 without token
+- [x] Register + login endpoints, password hashing
+- [x] JWT issuing and validation
+- [x] Protected endpoint returns 401 without token
 
 ### Day 4 — Sites CRUD
 - [ ] POST /sites, GET /sites, DELETE /sites/{id}

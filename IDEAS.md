@@ -6,3 +6,7 @@
 - Playwright instance is created per request; pool it if load grows
 - Solution uses the new .slnx format; may break older CI tooling
 - Install Docker Desktop locally when Postgres/Hangfire need it
+
+## Parked from Day 3
+- Endpoints lack Produces<T>() so Swagger shows "Undocumented" for
+  non-200 responses
