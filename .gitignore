@@ -6,3 +6,8 @@ obj/
 *.suo
 .env
 .env.local
+
+# Check screenshots (default output path is outside the repo; this guards
+# against Screenshots:Path ever being pointed in-repo)
+screenshots/
+Screenshots/

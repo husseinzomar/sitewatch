@@ -31,8 +31,8 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Scoped to the authenticated user only
 
 ### Day 5 — First Playwright scenario
-- [ ] Runner service in Infra: open URL, assert page loaded
-- [ ] Capture screenshot, store path + status + duration
+- [x] Runner service in Infra: open URL, assert page loaded
+- [x] Capture screenshot, store path + status + duration
 
 ### Day 6 — Checkout flow scenario
 - [ ] Browse -> add to cart -> reach checkout page

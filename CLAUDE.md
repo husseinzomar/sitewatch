@@ -44,5 +44,10 @@ auth (dev-only).
 Day 4 done: Sites CRUD (POST/GET/DELETE /sites, GET /sites/{id}),
 ownership-scoped to the authenticated user, 404 not 403 for non-owned
 sites, verified with two separate users.
-Next: Day 5 — first Playwright scenario in Infra (open URL, assert
-page loaded, capture screenshot).
+Day 5 done: PlaywrightCheckRunner in Infra for CheckType.PageLoad —
+singleton browser, per-check context, 30s total budget with a 20s
+per-operation cap, Failed/Error split by failure location, screenshots
+on failure only. Temporary POST /sites/{id}/run-check (dev-only) for
+manual testing until Hangfire lands.
+Next: Day 6 — checkout flow scenario (browse -> add to cart -> reach
+checkout page).

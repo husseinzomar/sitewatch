@@ -7,9 +7,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.Playwright;
+using SiteWatch.Core.Checks;
 using SiteWatch.Core.Entities;
 using SiteWatch.Core.Security;
 using SiteWatch.Infra;
+using SiteWatch.Infra.Checks;
 using SiteWatch.Infra.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,6 +20,7 @@ builder.Services.AddDbContext<SiteWatchDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
+builder.Services.AddSingleton<ICheckRunner, PlaywrightCheckRunner>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Jwt:Key configuration is required.");
@@ -292,6 +295,29 @@ app.MapDelete("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatc
 .Produces(StatusCodes.Status204NoContent)
 .Produces(StatusCodes.Status404NotFound)
 .Produces(StatusCodes.Status401Unauthorized);
+
+if (app.Environment.IsDevelopment())
+{
+    // Temporary: manual trigger for testing checks before Hangfire scheduling
+    // exists (Day 7). Remove this endpoint then.
+    app.MapPost("/sites/{id:guid}/run-check", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, ICheckRunner checkRunner, CancellationToken ct) =>
+    {
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var site = await db.Sites.SingleOrDefaultAsync(s => s.Id == id && s.UserId == userId, ct);
+        if (site is null)
+        {
+            return Results.NotFound();
+        }
+
+        var outcome = await checkRunner.RunAsync(site, CheckType.PageLoad, ct);
+        return Results.Ok(outcome);
+    })
+    .RequireAuthorization();
+}
 
 app.Run();
 
