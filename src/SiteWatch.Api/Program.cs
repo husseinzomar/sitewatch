@@ -1,6 +1,12 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using SiteWatch.Infra;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<SiteWatchDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+
 var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));

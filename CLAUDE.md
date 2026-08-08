@@ -15,8 +15,21 @@ Playwright-based e-commerce monitoring SaaS. Solo project, 14-day build plan.
   rely on training data.
 - New ideas go in IDEAS.md, not into the code.
 
+## Neon connection string
+Must use Neon's .NET-format snippet from its Connect dialog verbatim —
+pooler host (`-pooler` suffix), `SSL Mode=VerifyFull`, and
+`Channel Binding=Require`. Plain `Require` without channel binding, or
+the non-pooler host, will silently produce auth/parsing failures that
+look unrelated to the actual cause.
+Set it by editing `secrets.json` directly (find the path via
+`dotnet user-secrets list --project src/SiteWatch.Api` or the
+`UserSecretsId` in the csproj) — PowerShell string handling mangles the
+value at every semicolon when passed as a `dotnet user-secrets set`
+argument. Never commit the value; never print it in chat or logs.
+
 ## Status
 Day 1 done: scaffold, GitHub push, Railway deploy verified in production
 (https://sitewatch-production-4647.up.railway.app).
-Next: Day 2 — Neon Postgres + EF Core + 4 entities (User, Site, Check,
-CheckResult) + first migration.
+Day 2 done: Neon Postgres + EF Core model (User, Site, Check,
+CheckResult) + InitialCreate migration applied to Neon.
+Next: Day 3 — Auth (register/login, password hashing, JWT).
