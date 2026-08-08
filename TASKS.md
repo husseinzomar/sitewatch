@@ -16,10 +16,10 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Deploy to Railway, public URL returns Example Domain
 
 ### Day 2 — Database
-- [ ] Neon Postgres project created, connection string in Railway vars
-- [ ] EF Core + Npgsql in Infra
-- [ ] Entities: User, Site, Check, CheckResult
-- [ ] First migration applied to Neon
+- [x] Neon Postgres project created, connection string in Railway vars
+- [x] EF Core + Npgsql in Infra
+- [x] Entities: User, Site, Check, CheckResult
+- [x] First migration applied to Neon
 
 ### Day 3 — Auth
 - [x] Register + login endpoints, password hashing
