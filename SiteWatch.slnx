@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SiteWatch.Api/SiteWatch.Api.csproj" />
+    <Project Path="src/SiteWatch.Core/SiteWatch.Core.csproj" />
+    <Project Path="src/SiteWatch.Infra/SiteWatch.Infra.csproj" />
+  </Folder>
+</Solution>
