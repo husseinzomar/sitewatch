@@ -3,7 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import 'auth_state.dart';
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final client = ApiClient();
+  // Single wiring point for session expiry: any 401, from any screen or
+  // provider, routes through here.
+  client.onUnauthorized = () => ref.read(authControllerProvider.notifier).logout();
+  return client;
+});
 
 final authControllerProvider = NotifierProvider<AuthController, AuthState>(AuthController.new);
 
@@ -34,6 +40,13 @@ class AuthController extends Notifier<AuthState> {
   }
 
   void logout() {
+    // Guards against concurrent 401s (e.g. sites list + a delete in flight
+    // when the token expires) both firing onUnauthorized and calling this
+    // twice — the second call is a no-op rather than redundant work.
+    if (state is AuthUnauthenticated) {
+      return;
+    }
+
     ref.read(apiClientProvider).setToken(null);
     state = const AuthUnauthenticated();
   }

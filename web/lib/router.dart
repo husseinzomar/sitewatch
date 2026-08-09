@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'auth/auth_controller.dart';
 import 'auth/auth_state.dart';
-import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/sites_list_screen.dart';
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
@@ -32,7 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      GoRoute(path: '/', builder: (context, state) => const SitesListScreen()),
     ],
   );
 });

@@ -56,7 +56,7 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Login screen works against the real API
 
 ### Day 10 — Sites screen
-- [ ] List sites, add site, delete site
+- [x] List sites, add site, delete site
 
 ### Day 11 — Site detail
 - [ ] Last 7 check results with status and timestamp

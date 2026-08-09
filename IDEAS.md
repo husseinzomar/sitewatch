@@ -23,3 +23,7 @@
 ## Parked from Day 9
 - JWT is in-memory only — session dies on refresh. Decide on persistence
   (secure storage vs refresh token) before launch.
+
+## Parked from Day 10
+- No PUT /sites endpoint, so a site's URL can't be edited from the UI —
+  only delete and recreate.

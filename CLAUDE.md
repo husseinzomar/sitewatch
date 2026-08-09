@@ -81,4 +81,13 @@ added to the API so CheckStatus decodes by name not index. Dev-only CORS
 policy for http://localhost:5000. Verified end-to-end against the real
 API.
 
-Next: Day 10 — sites list screen (list, add, delete).
+Day 10 done: sites list screen (loading/empty/error states, pull-to-refresh),
+add-site dialog with client + server validation, delete with irreversible-
+history-loss confirmation, all Riverpod-provider-driven (sitesProvider +
+sitesControllerProvider invalidation, no setState list). ApiClient gained
+a single-choke-point 401 handler (UnauthorizedException -> AuthController
+.logout(), idempotent against concurrent 401s) distinct from wrong-password
+and validation failures.
+
+Next: Day 11 — site detail screen (last check results + screenshot
+viewer).
