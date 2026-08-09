@@ -101,6 +101,24 @@ class ApiClient {
     return list.map((e) => CheckResultResponse.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  // The endpoint returns the presigned URL as JSON rather than a 302:
+  // browsers don't let JS read the Location header of a cross-origin
+  // redirect (or expose the redirect to the caller at all), so following
+  // one from here was never going to work. Plain GET, read the "url" field;
+  // the caller fetches that URL directly from R2 as a separate,
+  // unauthenticated request.
+  Future<String?> getScreenshotUrl(String siteId, String resultId) async {
+    final response = await _get('/sites/$siteId/results/$resultId/screenshot');
+    if (response.statusCode == 404) {
+      // Covers both "no screenshot" and "old filesystem path" — neither is
+      // an error the caller needs to distinguish.
+      return null;
+    }
+    _throwIfNotOk(response);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['url'] as String;
+  }
+
   Future<http.Response> _get(String path) async {
     try {
       return await _client.get(Uri.parse('$apiBaseUrl$path'), headers: _headers);

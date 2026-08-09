@@ -27,3 +27,18 @@
 ## Parked from Day 10
 - No PUT /sites endpoint, so a site's URL can't be edited from the UI —
   only delete and recreate.
+
+## ACTION REQUIRED ON DAY 12 — R2 CORS origin
+The R2 bucket's CORS policy currently allows only `http://localhost:5000`.
+Once Day 12 picks a production hosting URL for the Flutter Web frontend,
+that origin MUST be added to the bucket's `AllowedOrigins`, or screenshot
+thumbnails will silently fail to load in production (broken-image icon,
+no error surfaced anywhere obvious) while everything else keeps working.
+
+## Parked from the R2 object storage session
+- screenshotUrlProvider is `.autoDispose`, so navigating away from a site
+  detail screen and back re-fetches a fresh presigned URL. This does NOT
+  cover staying on the same screen with the tab open past the URL's
+  1-hour expiry — an old thumbnail on a still-open screen can go dead.
+  Low-harm (one broken thumbnail, fixed by a refresh); a timer-based fix
+  was considered and deliberately skipped as disproportionate.

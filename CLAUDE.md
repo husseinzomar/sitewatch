@@ -37,6 +37,15 @@ argument. Never commit the value; never print it in chat or logs.
   — verified against the installed 1.61.0 assembly. Both must be caught,
   or a genuinely-Failed check (site down, login rejected) gets
   misclassified as Error.
+- R2 rejects AWSSDK.S3 v4's defaults: needs `RequestChecksumCalculation`
+  and `ResponseChecksumValidation` set to `WHEN_REQUIRED` on
+  `AmazonS3Config`, plus `UseChunkEncoding = false` and
+  `DisablePayloadSigning = true` on `PutObjectRequest` — otherwise R2
+  rejects the upload ("STREAMING-AWS4-HMAC-SHA256-PAYLOAD[-TRAILER] not
+  implemented").
+- Browsers won't let JS read the Location header of a cross-origin 302
+  redirect (or follow it usefully from Flutter Web). The screenshot
+  endpoint returns the presigned URL as JSON, not a redirect.
 
 ## Status
 Day 1 done: scaffold, GitHub push, Railway deploy verified in production
@@ -97,6 +106,12 @@ tooltip, non-interactive screenshot-captured indicator (no image
 rendering yet — filesystem screenshots aren't servable and don't survive
 a Railway deploy).
 
-Next session: object storage for screenshots (Cloudflare R2), so the
-screenshot indicator can become a real viewer.
-Then Day 12: deploy the Flutter Web frontend.
+R2 object storage done: screenshots upload to R2 from memory (no local
+disk), IScreenshotStore in Core with R2ScreenshotStore/NullScreenshotStore
+in Infra (same degraded-mode pattern as Resend), GET
+/sites/{id}/results/{resultId}/screenshot returns the presigned URL as
+JSON, Flutter renders a real thumbnail that opens full-size on tap. Old
+filesystem-path rows correctly fall back to "not available" via the
+"screenshots/" key-prefix check. Verified end-to-end with real uploads.
+
+Next: Day 12 — deploy the Flutter Web frontend.

@@ -16,10 +16,12 @@ using SiteWatch.Core.Alerts;
 using SiteWatch.Core.Checks;
 using SiteWatch.Core.Entities;
 using SiteWatch.Core.Security;
+using SiteWatch.Core.Storage;
 using SiteWatch.Infra;
 using SiteWatch.Infra.Alerts;
 using SiteWatch.Infra.Checks;
 using SiteWatch.Infra.Security;
+using SiteWatch.Infra.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,8 +32,20 @@ builder.Services.AddDbContext<SiteWatchDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
-builder.Services.AddSingleton<ICheckRunner, PlaywrightCheckRunner>();
 builder.Services.AddScoped<CheckExecutionService>();
+
+var r2Configured = new[] { "R2:AccessKeyId", "R2:SecretAccessKey", "R2:Endpoint", "R2:BucketName" }
+    .All(key => !string.IsNullOrEmpty(builder.Configuration[key]));
+if (r2Configured)
+{
+    builder.Services.AddSingleton<IScreenshotStore, R2ScreenshotStore>();
+}
+else
+{
+    builder.Services.AddSingleton<IScreenshotStore, NullScreenshotStore>();
+}
+
+builder.Services.AddSingleton<ICheckRunner, PlaywrightCheckRunner>();
 
 var resendApiKey = builder.Configuration["Resend:ApiKey"];
 var resendConfigured = !string.IsNullOrEmpty(resendApiKey);
@@ -106,6 +120,11 @@ var app = builder.Build();
 if (!resendConfigured)
 {
     app.Logger.LogWarning("Resend:ApiKey is not configured. Email alerts are disabled (NullAlertSender).");
+}
+
+if (!r2Configured)
+{
+    app.Logger.LogWarning("R2 configuration is incomplete. Screenshot capture/viewing is disabled (NullScreenshotStore).");
 }
 
 if (app.Environment.IsDevelopment())
@@ -406,6 +425,49 @@ app.MapGet("/sites/{id:guid}/results", async (Guid id, ClaimsPrincipal user, Sit
 .Produces(StatusCodes.Status404NotFound)
 .Produces(StatusCodes.Status401Unauthorized);
 
+// Returns the presigned URL as JSON rather than a 302 redirect. Browsers
+// deliberately don't let JS read the Location header of a cross-origin
+// redirect (Fetch spec treats it as opaque), so a Flutter Web caller can
+// never actually get at the R2 URL by following one — the request just
+// fails with net::ERR_FAILED after preflight, R2 is never reached. Do not
+// "simplify" this back to Results.Redirect; it doesn't work from a browser.
+app.MapGet("/sites/{id:guid}/results/{resultId:guid}/screenshot", async (Guid id, Guid resultId, ClaimsPrincipal user, SiteWatchDbContext db, IScreenshotStore screenshotStore, CancellationToken ct) =>
+{
+    if (!TryGetUserId(user, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await db.CheckResults
+        .Where(r => r.Id == resultId && r.Check.SiteId == id && r.Check.Site.UserId == userId)
+        .SingleOrDefaultAsync(ct);
+
+    if (result?.ScreenshotPath is null)
+    {
+        return Results.NotFound();
+    }
+
+    // New keys are always "screenshots/{siteId}/{utcTimestamp}.png". Old rows
+    // (pre-R2) hold filesystem paths, which never match this prefix — reject
+    // them here rather than attempting (and failing) an R2 lookup.
+    if (!result.ScreenshotPath.StartsWith("screenshots/", StringComparison.Ordinal))
+    {
+        return Results.NotFound();
+    }
+
+    var url = await screenshotStore.GetViewUrlAsync(result.ScreenshotPath, ct);
+    if (url is null)
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(new ScreenshotUrlResponse(url));
+})
+.RequireAuthorization()
+.Produces<ScreenshotUrlResponse>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound)
+.Produces(StatusCodes.Status401Unauthorized);
+
 if (app.Environment.IsDevelopment())
 {
     // Temporary: manual trigger for testing checks now that Hangfire drives
@@ -478,3 +540,4 @@ record LoginResponse(string Token);
 record MeResponse(Guid Id, string Email);
 record SiteResponse(Guid Id, string Name, string Url, bool IsActive, DateTimeOffset CreatedAt);
 record CheckResultResponse(Guid Id, Guid CheckId, CheckStatus Status, int DurationMs, string? ErrorMessage, string? ScreenshotPath, DateTimeOffset RanAt);
+record ScreenshotUrlResponse(string Url);

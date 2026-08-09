@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using SiteWatch.Core.Checks;
 using SiteWatch.Core.Entities;
+using SiteWatch.Core.Storage;
 
 namespace SiteWatch.Infra.Checks;
 
@@ -24,15 +25,17 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
     private const string SauceDemoUrl = "https://www.saucedemo.com";
 
     private readonly IConfiguration _configuration;
+    private readonly IScreenshotStore _screenshotStore;
     private readonly ILogger<PlaywrightCheckRunner> _logger;
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     private IPlaywright? _playwright;
     private IBrowser? _browser;
 
-    public PlaywrightCheckRunner(IConfiguration configuration, ILogger<PlaywrightCheckRunner> logger)
+    public PlaywrightCheckRunner(IConfiguration configuration, IScreenshotStore screenshotStore, ILogger<PlaywrightCheckRunner> logger)
     {
         _configuration = configuration;
+        _screenshotStore = screenshotStore;
         _logger = logger;
     }
 
@@ -262,15 +265,8 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
 
         try
         {
-            var directory = _configuration["Screenshots:Path"] ?? Path.Combine(Path.GetTempPath(), "sitewatch-screenshots");
-            Directory.CreateDirectory(directory);
-
-            var fileName = $"{siteId}_{DateTime.UtcNow:yyyyMMddTHHmmssfffZ}.png";
-            var fullPath = Path.Combine(directory, fileName);
-
-            await page.ScreenshotAsync(new PageScreenshotOptions { Path = fullPath });
-
-            return fullPath;
+            var bytes = await page.ScreenshotAsync(new PageScreenshotOptions());
+            return await _screenshotStore.UploadAsync(bytes, siteId, CancellationToken.None);
         }
         catch (Exception ex)
         {
