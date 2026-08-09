@@ -87,15 +87,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-const string FlutterDevCorsPolicy = "FlutterDev";
-if (builder.Environment.IsDevelopment())
-{
-    // Dev-only: lets the Flutter web dev server (flutter run -d chrome
-    // --web-port=5000) call this API from the browser. Never registered
-    // outside Development.
-    builder.Services.AddCors(options => options.AddPolicy(FlutterDevCorsPolicy, policy =>
-        policy.WithOrigins("http://localhost:5000").AllowAnyHeader().AllowAnyMethod()));
-}
+const string FrontendCorsPolicy = "Frontend";
+
+// Allowed origins come from configuration (Cors:AllowedOrigins, a string
+// array — appsettings.Development.json for local dev, Cors__AllowedOrigins__0
+// etc. in Railway for production) rather than AllowAnyOrigin: auth is a
+// Bearer header, not a cookie, so AllowAnyOrigin isn't a strict security
+// hole here, but an explicit origin list is still the deliberate choice —
+// no origin silently becomes allowed just because it showed up in a request.
+var corsAllowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy(FrontendCorsPolicy, policy =>
+    policy.WithOrigins(corsAllowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -127,9 +129,14 @@ if (!r2Configured)
     app.Logger.LogWarning("R2 configuration is incomplete. Screenshot capture/viewing is disabled (NullScreenshotStore).");
 }
 
+// Unconditional and before UseAuthentication/UseAuthorization: CORS must
+// run ahead of auth in the pipeline regardless of environment, or a
+// preflight/actual cross-origin request can get rejected by auth before
+// CORS ever gets a chance to allow it.
+app.UseCors(FrontendCorsPolicy);
+
 if (app.Environment.IsDevelopment())
 {
-    app.UseCors(FlutterDevCorsPolicy);
     app.UseSwagger();
     app.UseSwaggerUI();
     app.UseHangfireDashboard();
