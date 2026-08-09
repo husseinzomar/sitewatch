@@ -40,9 +40,9 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Failure produces a useful error message, not a stack trace
 
 ### Day 7 — Scheduling
-- [ ] Hangfire + Postgres storage
-- [ ] Daily recurring job per site
-- [ ] Results written to CheckResult table
+- [x] Hangfire + Postgres storage
+- [x] Daily recurring job per site
+- [x] Results written to CheckResult table
 
 ## Week 2 — Product
 

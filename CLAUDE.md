@@ -59,5 +59,14 @@ target, ignores Site.Url), step-named Failed messages, shared
 ExecuteAsync wrapper with PageLoad, TimeoutException classification fix
 applied to both scenarios. run-check now takes ?type= (defaults to
 PageLoad).
-Next: Day 7 — Hangfire scheduling + persisting CheckResult rows
-(replaces the temporary run-check endpoint).
+Day 7 done: Hangfire + Hangfire.PostgreSql on the "hangfire" schema
+(separate from public), CheckExecutionService persists CheckResult rows
+from both the daily recurring job and manual /run-check, per-job DI
+scoping verified empirically, dashboard at /hangfire (dev-only).
+POST /sites creates PageLoad (scheduled) + CheckoutFlow (disabled,
+manual-only) checks; DELETE /sites removes their recurring jobs.
+
+Week 1 complete: backend works end-to-end — auth, Sites CRUD, both check
+scenarios, daily scheduling, persisted results.
+
+Next: Day 8 — Resend email alerts (failure only, not success).

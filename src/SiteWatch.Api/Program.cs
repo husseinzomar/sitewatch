@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net.Mail;
 using System.Security.Claims;
 using System.Text;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -21,6 +23,12 @@ builder.Services.AddDbContext<SiteWatchDbContext>(options =>
 
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddSingleton<ICheckRunner, PlaywrightCheckRunner>();
+builder.Services.AddScoped<CheckExecutionService>();
+
+builder.Services.AddHangfire(config => config.UsePostgreSqlStorage(
+    bootstrap => bootstrap.UseNpgsqlConnection(builder.Configuration.GetConnectionString("Postgres")),
+    new PostgreSqlStorageOptions { SchemaName = "hangfire" }));
+builder.Services.AddHangfireServer();
 
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Jwt:Key configuration is required.");
@@ -69,6 +77,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseHangfireDashboard();
 }
 
 app.UseAuthentication();
@@ -190,7 +199,7 @@ app.MapGet("/me", (ClaimsPrincipal user) =>
 const int MaxSiteNameLength = 200;
 const int MaxSiteUrlLength = 2048;
 
-app.MapPost("/sites", async (CreateSiteRequest request, ClaimsPrincipal user, SiteWatchDbContext db) =>
+app.MapPost("/sites", async (CreateSiteRequest request, ClaimsPrincipal user, SiteWatchDbContext db, IRecurringJobManager recurringJobManager) =>
 {
     if (!TryGetUserId(user, out var userId))
     {
@@ -224,7 +233,35 @@ app.MapPost("/sites", async (CreateSiteRequest request, ClaimsPrincipal user, Si
     };
 
     db.Sites.Add(site);
+
+    // PageLoad is scheduled daily. CheckoutFlow exists so /run-check can
+    // exercise it manually, but isn't enabled for daily scheduling yet —
+    // there's no per-site config for it, and it's a heavier flow to run
+    // unattended for every site.
+    var pageLoadCheck = new Check
+    {
+        Id = Guid.NewGuid(),
+        SiteId = site.Id,
+        Type = CheckType.PageLoad,
+        IsEnabled = true,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
+    var checkoutFlowCheck = new Check
+    {
+        Id = Guid.NewGuid(),
+        SiteId = site.Id,
+        Type = CheckType.CheckoutFlow,
+        IsEnabled = false,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
+    db.Checks.AddRange(pageLoadCheck, checkoutFlowCheck);
+
     await db.SaveChangesAsync();
+
+    recurringJobManager.AddOrUpdate<CheckExecutionService>(
+        $"check-{pageLoadCheck.Id}",
+        s => s.ExecuteAsync(pageLoadCheck.Id, true, CancellationToken.None),
+        Cron.Daily());
 
     return Results.Created(
         $"/sites/{site.Id}",
@@ -273,7 +310,7 @@ app.MapGet("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatchDb
 .Produces(StatusCodes.Status404NotFound)
 .Produces(StatusCodes.Status401Unauthorized);
 
-app.MapDelete("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db) =>
+app.MapDelete("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, IRecurringJobManager recurringJobManager) =>
 {
     if (!TryGetUserId(user, out var userId))
     {
@@ -286,8 +323,16 @@ app.MapDelete("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatc
         return Results.NotFound();
     }
 
+    // Must be read before the cascade delete removes the Check rows.
+    var checkIds = await db.Checks.Where(c => c.SiteId == id).Select(c => c.Id).ToListAsync();
+
     db.Sites.Remove(site);
     await db.SaveChangesAsync();
+
+    foreach (var checkId in checkIds)
+    {
+        recurringJobManager.RemoveIfExists($"check-{checkId}");
+    }
 
     return Results.NoContent();
 })
@@ -296,11 +341,43 @@ app.MapDelete("/sites/{id:guid}", async (Guid id, ClaimsPrincipal user, SiteWatc
 .Produces(StatusCodes.Status404NotFound)
 .Produces(StatusCodes.Status401Unauthorized);
 
+const int MaxResultsReturned = 20;
+
+app.MapGet("/sites/{id:guid}/results", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db) =>
+{
+    if (!TryGetUserId(user, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var site = await db.Sites.SingleOrDefaultAsync(s => s.Id == id && s.UserId == userId);
+    if (site is null)
+    {
+        return Results.NotFound();
+    }
+
+    var results = await db.CheckResults
+        .Where(r => r.Check.SiteId == id)
+        .OrderByDescending(r => r.RanAt)
+        .Take(MaxResultsReturned)
+        .Select(r => new CheckResultResponse(r.Id, r.CheckId, r.Status, r.DurationMs, r.ErrorMessage, r.ScreenshotPath, r.RanAt))
+        .ToListAsync();
+
+    return Results.Ok(results);
+})
+.RequireAuthorization()
+.Produces<List<CheckResultResponse>>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound)
+.Produces(StatusCodes.Status401Unauthorized);
+
 if (app.Environment.IsDevelopment())
 {
-    // Temporary: manual trigger for testing checks before Hangfire scheduling
-    // exists (Day 7). Remove this endpoint then.
-    app.MapPost("/sites/{id:guid}/run-check", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, ICheckRunner checkRunner, CancellationToken ct, CheckType type = CheckType.PageLoad) =>
+    // Temporary: manual trigger for testing checks now that Hangfire drives
+    // the daily schedule. Kept per Day 7 scope — still useful for on-demand
+    // testing, including CheckType.CheckoutFlow, which isn't enabled for
+    // scheduling. Now persists a CheckResult via CheckExecutionService
+    // instead of just returning the outcome.
+    app.MapPost("/sites/{id:guid}/run-check", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, CheckExecutionService executionService, CancellationToken ct, CheckType type = CheckType.PageLoad) =>
     {
         if (!TryGetUserId(user, out var userId))
         {
@@ -313,8 +390,16 @@ if (app.Environment.IsDevelopment())
             return Results.NotFound();
         }
 
-        var outcome = await checkRunner.RunAsync(site, type, ct);
-        return Results.Ok(outcome);
+        var check = await db.Checks.SingleOrDefaultAsync(c => c.SiteId == id && c.Type == type, ct);
+        if (check is null)
+        {
+            return Results.NotFound();
+        }
+
+        var outcome = await executionService.ExecuteAsync(check.Id, isScheduled: false, ct);
+        return outcome is null
+            ? Results.Ok(new { skipped = true })
+            : Results.Ok(outcome);
     })
     .RequireAuthorization();
 }
@@ -356,3 +441,4 @@ record RegisterResponse(Guid Id);
 record LoginResponse(string Token);
 record MeResponse(Guid Id, string Email);
 record SiteResponse(Guid Id, string Name, string Url, bool IsActive, DateTimeOffset CreatedAt);
+record CheckResultResponse(Guid Id, Guid CheckId, CheckStatus Status, int DurationMs, string? ErrorMessage, string? ScreenshotPath, DateTimeOffset RanAt);

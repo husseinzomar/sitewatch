@@ -19,3 +19,13 @@
   raw Chromium text leaks into alert messages
 - Untested: a site that hangs until the per-operation timeout
 
+## Parked from Day 7
+- NU1903: Newtonsoft.Json 11.0.1 (known high-severity advisory) comes in
+  transitively via Hangfire.AspNetCore's own dependency chain, not
+  something we reference directly. Check whether adding a direct
+  PackageReference to a patched Newtonsoft.Json version resolves it.
+- All checks run at 00:00 UTC — for Saudi sites that's 3am local;
+  consider a schedule that catches failures before peak shopping hours
+- Every check fires at the same instant; with many sites that means many
+  concurrent browsers. Needs jitter or staggering.
+
