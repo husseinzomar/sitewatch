@@ -11,3 +11,5 @@ obj/
 # against Screenshots:Path ever being pointed in-repo)
 screenshots/
 Screenshots/
+
+.wrangler/
