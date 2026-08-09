@@ -12,20 +12,14 @@
   JsonStringEnumConverter so clients see "Passed"/"Failed" instead of
   0/1. DB storage stays int.
 
-## Parked from Day 6
-- Login failure reports "login form was not found" when credentials
-  were actually rejected; detect the site's error banner instead
-- DescribeFailure doesn't map net:: error codes (e.g. ERR_EMPTY_RESPONSE);
-  raw Chromium text leaks into alert messages
-- Untested: a site that hangs until the per-operation timeout
+- CheckoutFlow login failure says "the login form was not found" when the
+  real cause is rejected credentials. Distinguish by checking for the
+  site's error banner before reporting.
 
-## Parked from Day 7
-- NU1903: Newtonsoft.Json 11.0.1 (known high-severity advisory) comes in
-  transitively via Hangfire.AspNetCore's own dependency chain, not
-  something we reference directly. Check whether adding a direct
-  PackageReference to a patched Newtonsoft.Json version resolves it.
-- All checks run at 00:00 UTC — for Saudi sites that's 3am local;
-  consider a schedule that catches failures before peak shopping hours
-- Every check fires at the same instant; with many sites that means many
-  concurrent browsers. Needs jitter or staggering.
-
+## Parked from Day 8
+- Downtime streak lookback is capped at 90 rows for cost reasons; a check
+  failing longer than that reports "at least N days" instead of an exact
+  figure. If this matters, track streak-start on the Check row instead
+  of scanning history — that needs a migration, hence parking it.
+- No PUT /sites endpoint — had to edit the URL directly in SQL to test
+  recovery.

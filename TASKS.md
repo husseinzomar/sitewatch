@@ -47,9 +47,9 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 ## Week 2 — Product
 
 ### Day 8 — Alerts
-- [ ] Resend integration
-- [ ] Email on failure only, not on success
-- [ ] Verified by deliberately breaking a target site
+- [x] Resend integration
+- [x] Email on failure only, not on success
+- [x] Verified by deliberately breaking a target site
 
 ### Day 9 — Flutter Web shell
 - [ ] Project created, routing, API client

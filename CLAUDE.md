@@ -69,4 +69,10 @@ manual-only) checks; DELETE /sites removes their recurring jobs.
 Week 1 complete: backend works end-to-end — auth, Sites CRUD, both check
 scenarios, daily scheduling, persisted results.
 
-Next: Day 8 — Resend email alerts (failure only, not success).
+Day 8 done: Resend email alerts on state transitions only (down/recovery),
+IAlertSender in Core with ResendAlertSender/NullAlertSender in Infra —
+missing Resend:ApiKey degrades to no-op with a startup warning rather
+than failing to boot. Verified end-to-end with real emails.
+
+Next: Day 9 — Flutter Web shell (project, routing, API client, login
+screen).

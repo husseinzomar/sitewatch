@@ -6,13 +6,17 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.Playwright;
+using Resend;
+using SiteWatch.Core.Alerts;
 using SiteWatch.Core.Checks;
 using SiteWatch.Core.Entities;
 using SiteWatch.Core.Security;
 using SiteWatch.Infra;
+using SiteWatch.Infra.Alerts;
 using SiteWatch.Infra.Checks;
 using SiteWatch.Infra.Security;
 
@@ -24,6 +28,18 @@ builder.Services.AddDbContext<SiteWatchDbContext>(options =>
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddSingleton<ICheckRunner, PlaywrightCheckRunner>();
 builder.Services.AddScoped<CheckExecutionService>();
+
+var resendApiKey = builder.Configuration["Resend:ApiKey"];
+var resendConfigured = !string.IsNullOrEmpty(resendApiKey);
+if (resendConfigured)
+{
+    builder.Services.AddResend(resendApiKey!);
+    builder.Services.AddScoped<IAlertSender, ResendAlertSender>();
+}
+else
+{
+    builder.Services.AddScoped<IAlertSender, NullAlertSender>();
+}
 
 builder.Services.AddHangfire(config => config.UsePostgreSqlStorage(
     bootstrap => bootstrap.UseNpgsqlConnection(builder.Configuration.GetConnectionString("Postgres")),
@@ -72,6 +88,11 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+if (!resendConfigured)
+{
+    app.Logger.LogWarning("Resend:ApiKey is not configured. Email alerts are disabled (NullAlertSender).");
+}
 
 if (app.Environment.IsDevelopment())
 {
