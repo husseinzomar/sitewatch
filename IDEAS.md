@@ -8,10 +8,6 @@
 - Install Docker Desktop locally when Postgres/Hangfire need it
 
 ## Parked from Day 5
-- CheckOutcome serializes CheckStatus as an int in API responses; add
-  JsonStringEnumConverter so clients see "Passed"/"Failed" instead of
-  0/1. DB storage stays int.
-
 - CheckoutFlow login failure says "the login form was not found" when the
   real cause is rejected credentials. Distinguish by checking for the
   site's error banner before reporting.
@@ -23,3 +19,7 @@
   of scanning history — that needs a migration, hence parking it.
 - No PUT /sites endpoint — had to edit the URL directly in SQL to test
   recovery.
+
+## Parked from Day 9
+- JWT is in-memory only — session dies on refresh. Decide on persistence
+  (secure storage vs refresh token) before launch.

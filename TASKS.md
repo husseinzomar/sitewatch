@@ -52,8 +52,8 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Verified by deliberately breaking a target site
 
 ### Day 9 — Flutter Web shell
-- [ ] Project created, routing, API client
-- [ ] Login screen works against the real API
+- [x] Project created, routing, API client
+- [x] Login screen works against the real API
 
 ### Day 10 — Sites screen
 - [ ] List sites, add site, delete site

@@ -74,5 +74,11 @@ IAlertSender in Core with ResendAlertSender/NullAlertSender in Infra —
 missing Resend:ApiKey degrades to no-op with a startup warning rather
 than failing to boot. Verified end-to-end with real emails.
 
-Next: Day 9 — Flutter Web shell (project, routing, API client, login
-screen).
+Day 9 done: Flutter Web shell in /web (web-only platform, Riverpod
+no-codegen, go_router with auth-driven redirect), ApiClient with
+login()/getMe() and hand-written response models, JsonStringEnumConverter
+added to the API so CheckStatus decodes by name not index. Dev-only CORS
+policy for http://localhost:5000. Verified end-to-end against the real
+API.
+
+Next: Day 10 — sites list screen (list, add, delete).

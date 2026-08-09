@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net.Mail;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json.Serialization;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -21,6 +22,9 @@ using SiteWatch.Infra.Checks;
 using SiteWatch.Infra.Security;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddDbContext<SiteWatchDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
@@ -69,6 +73,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+const string FlutterDevCorsPolicy = "FlutterDev";
+if (builder.Environment.IsDevelopment())
+{
+    // Dev-only: lets the Flutter web dev server (flutter run -d chrome
+    // --web-port=5000) call this API from the browser. Never registered
+    // outside Development.
+    builder.Services.AddCors(options => options.AddPolicy(FlutterDevCorsPolicy, policy =>
+        policy.WithOrigins("http://localhost:5000").AllowAnyHeader().AllowAnyMethod()));
+}
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -96,6 +110,7 @@ if (!resendConfigured)
 
 if (app.Environment.IsDevelopment())
 {
+    app.UseCors(FlutterDevCorsPolicy);
     app.UseSwagger();
     app.UseSwaggerUI();
     app.UseHangfireDashboard();

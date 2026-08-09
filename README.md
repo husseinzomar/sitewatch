@@ -33,6 +33,21 @@ Endpoints:
 - `GET http://localhost:5000/health`
 - `GET http://localhost:5000/browser-check`
 
+## Running locally (API + Flutter Web)
+
+```bash
+# Terminal 1 — API (port 5129)
+dotnet run --project src/SiteWatch.Api
+
+# Terminal 2 — Flutter Web (port 5000)
+cd web
+flutter run -d chrome --web-port=5000
+```
+
+The Flutter dev port is fixed at 5000 — the API's dev-only CORS policy
+is bound to `http://localhost:5000` specifically (not a wildcard), so
+running on a different port will get CORS-rejected by the browser.
+
 ## Build and test the Docker image locally
 
 ```bash
