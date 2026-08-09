@@ -89,5 +89,14 @@ a single-choke-point 401 handler (UnauthorizedException -> AuthController
 .logout(), idempotent against concurrent 401s) distinct from wrong-password
 and validation failures.
 
-Next: Day 11 — site detail screen (last check results + screenshot
-viewer).
+Day 11 done: site detail screen (/sites/:id, SiteResponse passed via
+go_router extra rather than a redundant fetch, with a clean "Site not
+found" fallback when extra is missing). Last 20 check results newest
+first, colour-coded status badges, hand-written relative time + UTC
+tooltip, non-interactive screenshot-captured indicator (no image
+rendering yet — filesystem screenshots aren't servable and don't survive
+a Railway deploy).
+
+Next session: object storage for screenshots (Cloudflare R2), so the
+screenshot indicator can become a real viewer.
+Then Day 12: deploy the Flutter Web frontend.

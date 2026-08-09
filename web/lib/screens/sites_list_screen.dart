@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../api/models/site_response.dart';
 import '../auth/auth_controller.dart';
@@ -122,6 +123,7 @@ class _SitesListView extends ConsumerWidget {
         return ListTile(
           title: Text(site.name),
           subtitle: Text('${site.url} • ${site.isActive ? 'Active' : 'Inactive'}'),
+          onTap: () => context.push('/sites/${site.id}', extra: site),
           trailing: IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Delete',

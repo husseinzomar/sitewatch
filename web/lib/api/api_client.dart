@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'models/check_result_response.dart';
 import 'models/login_response.dart';
 import 'models/me_response.dart';
 import 'models/site_response.dart';
@@ -91,6 +92,13 @@ class ApiClient {
   Future<void> deleteSite(String id) async {
     final response = await _delete('/sites/$id');
     _throwIfNotOk(response);
+  }
+
+  Future<List<CheckResultResponse>> getSiteResults(String siteId) async {
+    final response = await _get('/sites/$siteId/results');
+    _throwIfNotOk(response);
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => CheckResultResponse.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<http.Response> _get(String path) async {

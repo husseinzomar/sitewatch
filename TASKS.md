@@ -59,8 +59,8 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] List sites, add site, delete site
 
 ### Day 11 — Site detail
-- [ ] Last 7 check results with status and timestamp
-- [ ] Screenshot viewer
+- [x] Last 7 check results with status and timestamp
+- [x] Screenshot viewer
 
 ### Day 12 — Ship it
 - [ ] Flutter Web deployed

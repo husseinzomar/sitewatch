@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'api/models/site_response.dart';
 import 'auth/auth_controller.dart';
 import 'auth/auth_state.dart';
 import 'screens/login_screen.dart';
+import 'screens/site_detail_screen.dart';
 import 'screens/sites_list_screen.dart';
 
 class _RouterRefreshNotifier extends ChangeNotifier {
@@ -33,6 +35,16 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/', builder: (context, state) => const SitesListScreen()),
+      GoRoute(
+        path: '/sites/:id',
+        builder: (context, state) {
+          final site = state.extra;
+          if (site is! SiteResponse) {
+            return const SiteNotFoundScreen();
+          }
+          return SiteDetailScreen(site: site);
+        },
+      ),
     ],
   );
 });
