@@ -1,6 +1,7 @@
 # SiteWatch — 14 Day Plan
 
-Live: https://sitewatch-production-4647.up.railway.app
+API: https://sitewatch-production-4647.up.railway.app
+Frontend: https://sitewatch-a77.pages.dev
 
 Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 
@@ -63,9 +64,9 @@ Rule: one commit minimum per day. Ideas go to IDEAS.md, not into the code.
 - [x] Screenshot viewer
 
 ### Day 12 — Ship it
-- [ ] Flutter Web deployed
-- [ ] My own account monitoring one real site daily
-- [ ] End-to-end verified from phone
+- [x] Flutter Web deployed
+- [x] My own account monitoring one real site daily
+- [x] End-to-end verified from phone
 
 ### Day 13 — Portfolio assets
 - [ ] README: problem, architecture, stack, screenshots

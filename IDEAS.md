@@ -35,3 +35,9 @@
   1-hour expiry — an old thumbnail on a still-open screen can go dead.
   Low-harm (one broken thumbnail, fixed by a refresh); a timer-based fix
   was considered and deliberately skipped as disproportionate.
+
+## Parked from Day 12
+- No startup validation that lists all missing/invalid config keys at
+  once — would have saved an hour of crash-loop debugging today (each
+  missing Railway variable only surfaces one at a time, as whatever
+  breaks first at startup).

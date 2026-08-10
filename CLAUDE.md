@@ -46,6 +46,11 @@ argument. Never commit the value; never print it in chat or logs.
 - Browsers won't let JS read the Location header of a cross-origin 302
   redirect (or follow it usefully from Flutter Web). The screenshot
   endpoint returns the presigned URL as JSON, not a redirect.
+- Railway's Raw Editor REPLACES all environment variables, it does not
+  merge — always paste the complete set, not just the ones you're adding
+  or changing.
+- Railway needs the ADO.NET connection string format, same as local — a
+  libpq `postgresql://` URI crashes Hangfire at startup there too.
 
 ## Status
 Day 1 done: scaffold, GitHub push, Railway deploy verified in production
@@ -114,4 +119,11 @@ JSON, Flutter renders a real thumbnail that opens full-size on tap. Old
 filesystem-path rows correctly fall back to "not available" via the
 "screenshots/" key-prefix check. Verified end-to-end with real uploads.
 
-Next: Day 12 — deploy the Flutter Web frontend.
+Day 12 done: Flutter Web deployed to Cloudflare Pages
+(https://sitewatch-a77.pages.dev), CORS policy made configurable
+(Cors:AllowedOrigins, unconditional, no AllowAnyOrigin) and set for the
+production origin, R2 bucket CORS updated for the production origin too,
+all Railway variables set. Verified end-to-end in production, including
+from phone.
+
+Next: Day 13 — README and demo video.
