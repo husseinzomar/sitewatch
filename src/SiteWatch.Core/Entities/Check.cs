@@ -3,7 +3,11 @@ namespace SiteWatch.Core.Entities;
 public enum CheckType
 {
     PageLoad,
-    CheckoutFlow
+    CheckoutFlow,
+    // Appended, never inserted: this enum is stored as int in Postgres
+    // (.HasConversion<int>()), so reordering would silently corrupt the
+    // meaning of existing PageLoad/CheckoutFlow rows.
+    AdminDashboardCheck
 }
 
 public class Check

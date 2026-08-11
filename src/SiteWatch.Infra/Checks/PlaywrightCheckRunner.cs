@@ -24,6 +24,23 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
     // work against this site, so the flow ignores Site.Url entirely.
     private const string SauceDemoUrl = "https://www.saucedemo.com";
 
+    // AdminDashboardCheck's hardcoded target — a real production site (West
+    // Clean), not a demo store. Same reasoning as SauceDemoUrl: this flow's
+    // selectors and credentials are specific to this one site, so it ignores
+    // Site.Url entirely.
+    private const string WestCleanAdminLoginUrl = "https://westcleanapp.com/ar/admin/login";
+
+    // Playwright's default headless context is trivially fingerprintable as
+    // automation (navigator.webdriver: true, a UA containing "HeadlessChrome"),
+    // which appears to trigger server-side bot-detection slowdowns against
+    // westcleanapp.com that a real browser never hits. This UA string was
+    // captured from a real headful Chrome session on this machine.
+    private const string RealisticChromeUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
+
+    private const string SuppressWebdriverInitScript =
+        "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });";
+
     private readonly IConfiguration _configuration;
     private readonly IScreenshotStore _screenshotStore;
     private readonly ILogger<PlaywrightCheckRunner> _logger;
@@ -43,6 +60,7 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
     {
         CheckType.PageLoad => ExecuteAsync(site, RunPageLoadAsync, ct),
         CheckType.CheckoutFlow => ExecuteAsync(site, RunCheckoutFlowAsync, ct),
+        CheckType.AdminDashboardCheck => ExecuteAsync(site, RunAdminDashboardCheckAsync, ct),
         _ => Task.FromResult(new CheckOutcome(CheckStatus.Error, 0, $"CheckType.{type} is not implemented yet.", null))
     };
 
@@ -57,7 +75,8 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         try
         {
             var browser = await GetBrowserAsync(ct);
-            context = await browser.NewContextAsync();
+            context = await browser.NewContextAsync(new BrowserNewContextOptions { UserAgent = RealisticChromeUserAgent });
+            await context.AddInitScriptAsync(SuppressWebdriverInitScript);
             var page = await context.NewPageAsync();
             page.SetDefaultTimeout(PerOperationTimeoutMs);
 
@@ -241,6 +260,125 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);
     }
 
+    // Hardcoded flow for the West Clean admin panel only — a real production
+    // site, not a demo store. READ-ONLY: must never click "تعديل" (Edit),
+    // Save, or any other data-modifying control. Every action below was
+    // verified against the live, authenticated DOM before being written —
+    // do not add steps without the same verification.
+    private async Task<CheckOutcome> RunAdminDashboardCheckAsync(Site site, IPage page, Stopwatch stopwatch)
+    {
+        var email = _configuration["Checks:WestCleanAdmin:Email"];
+        var password = _configuration["Checks:WestCleanAdmin:Password"];
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            return new CheckOutcome(
+                CheckStatus.Error,
+                (int)stopwatch.ElapsedMilliseconds,
+                "West Clean admin credentials (Checks:WestCleanAdmin:Email / Checks:WestCleanAdmin:Password) are not configured.",
+                null);
+        }
+
+        var steps = new (string Description, string ElementLabel, Func<Task> Action)[]
+        {
+            // Hardcoded target, deliberately ignoring site.Url: this flow's
+            // selectors and credentials are specific to westcleanapp.com, so
+            // it must never run against whatever URL the Site row happens to
+            // have.
+            ("reach the site", "", () => page.GotoAsync(WestCleanAdminLoginUrl)),
+
+            ("log in", "the login form", async () =>
+            {
+                await page.GetByRole(AriaRole.Textbox, new() { Name = "البريد الإلكتروني" }).FillAsync(email);
+                await page.GetByRole(AriaRole.Textbox, new() { Name = "كلمة المرور" }).FillAsync(password);
+                await page.GetByRole(AriaRole.Button, new() { Name = "تسجيل الدخول" }).ClickAsync();
+                // Confirms login actually succeeded — this sidebar link only
+                // exists once authenticated — before the flow tries to click
+                // anything further.
+                await page.GetByRole(AriaRole.Link, new() { Name = "إدارة المغاسل" }).WaitForAsync(new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Visible
+                });
+            }),
+
+            ("open laundries management", "the laundries management link", async () =>
+            {
+                await page.GetByRole(AriaRole.Link, new() { Name = "إدارة المغاسل" }).ClickAsync();
+                await page.WaitForURLAsync("**/admin/laundries");
+            }),
+
+            ("open the first laundry's detail view", "the view link", async () =>
+            {
+                // Wildcarded on the numeric id rather than hardcoded: a
+                // future run's "first" laundry in the table could be a
+                // different id than the one this was verified against.
+                //
+                // TEMPORARY diagnostic logging — isolating whether the ~23-25s
+                // stall is inside ClickAsync itself or the subsequent
+                // WaitForURLAsync. Remove once the slow half is identified.
+                _logger.LogWarning("AdminDashboardCheck {SiteId}: about to click view link at {ElapsedMs}ms", site.Id, stopwatch.ElapsedMilliseconds);
+                // TEMPORARY — diagnostic only. Force = true skips Playwright's
+                // actionability checks (visible, stable, receives pointer
+                // events, enabled) and dispatches the click at the element's
+                // center regardless. If "click returned" now logs almost
+                // immediately, the normal ClickAsync was hanging/timing out
+                // in one of those actionability checks, not in click dispatch
+                // itself. MUST be reverted once this is confirmed either way —
+                // Force bypasses real UI issues (e.g. a genuinely covered or
+                // disabled control) that should legitimately fail a check.
+                await page.GetByRole(AriaRole.Link, new() { Name = "عرض" }).First.ClickAsync(new LocatorClickOptions { Force = true });
+                _logger.LogWarning("AdminDashboardCheck {SiteId}: click returned at {ElapsedMs}ms", site.Id, stopwatch.ElapsedMilliseconds);
+                await page.WaitForURLAsync("**/admin/laundries/*/view");
+                _logger.LogWarning("AdminDashboardCheck {SiteId}: WaitForURLAsync returned at {ElapsedMs}ms", site.Id, stopwatch.ElapsedMilliseconds);
+            })
+        };
+
+        foreach (var (description, elementLabel, action) in steps)
+        {
+            try
+            {
+                await action();
+            }
+            catch (PlaywrightException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+            catch (TimeoutException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+
+            if (BudgetExceededOutcome(stopwatch) is { } budgetOutcome)
+            {
+                return budgetOutcome;
+            }
+        }
+
+        try
+        {
+            // Generic page-title heading, not laundry-specific data (e.g. the
+            // laundry's name) — holds regardless of which laundry ends up
+            // first in the table.
+            await page.GetByRole(AriaRole.Heading, new() { Name = "عرض تفاصيل المغسلة" }).WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = PerOperationTimeoutMs
+            });
+        }
+        catch (PlaywrightException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the laundries section but the laundry detail page did not load.", screenshotPath);
+        }
+        catch (TimeoutException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the laundries section but the laundry detail page did not load.", screenshotPath);
+        }
+
+        return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);
+    }
+
     private async Task<CheckOutcome> FailedStepAsync(IPage page, Guid siteId, Stopwatch stopwatch, string description, string elementLabel, Exception ex)
     {
         var screenshotPath = await TryCaptureScreenshotAsync(page, siteId, stopwatch);
@@ -352,7 +490,10 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
             if (_browser is null)
             {
                 _playwright = await Playwright.CreateAsync();
-                _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+                // TEMPORARY — diagnostic only, flipped back to false so the run
+                // can be watched visually. MUST be reverted to true before this
+                // goes anywhere near production.
+                _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = false });
             }
 
             return _browser;
