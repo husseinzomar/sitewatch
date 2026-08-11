@@ -15,3 +15,6 @@ Screenshots/
 .wrangler/
 
 .wrangler/
+
+# Playwright trace output (ad hoc diagnostic runs, e.g. Tracing.StartAsync)
+trace.zip

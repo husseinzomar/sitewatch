@@ -77,6 +77,7 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
             var browser = await GetBrowserAsync(ct);
             context = await browser.NewContextAsync(new BrowserNewContextOptions { UserAgent = RealisticChromeUserAgent });
             await context.AddInitScriptAsync(SuppressWebdriverInitScript);
+
             var page = await context.NewPageAsync();
             page.SetDefaultTimeout(PerOperationTimeoutMs);
 
@@ -313,23 +314,18 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
                 // future run's "first" laundry in the table could be a
                 // different id than the one this was verified against.
                 //
-                // TEMPORARY diagnostic logging — isolating whether the ~23-25s
-                // stall is inside ClickAsync itself or the subsequent
-                // WaitForURLAsync. Remove once the slow half is identified.
-                _logger.LogWarning("AdminDashboardCheck {SiteId}: about to click view link at {ElapsedMs}ms", site.Id, stopwatch.ElapsedMilliseconds);
-                // TEMPORARY — diagnostic only. Force = true skips Playwright's
-                // actionability checks (visible, stable, receives pointer
-                // events, enabled) and dispatches the click at the element's
-                // center regardless. If "click returned" now logs almost
-                // immediately, the normal ClickAsync was hanging/timing out
-                // in one of those actionability checks, not in click dispatch
-                // itself. MUST be reverted once this is confirmed either way —
-                // Force bypasses real UI issues (e.g. a genuinely covered or
-                // disabled control) that should legitimately fail a check.
-                await page.GetByRole(AriaRole.Link, new() { Name = "عرض" }).First.ClickAsync(new LocatorClickOptions { Force = true });
-                _logger.LogWarning("AdminDashboardCheck {SiteId}: click returned at {ElapsedMs}ms", site.Id, stopwatch.ElapsedMilliseconds);
+                // CSS selector, not GetByRole: westcleanapp.com's own
+                // script.js throws an unhandled "sidebarToggle is not
+                // defined" error on this page, which breaks Playwright's
+                // accessibility-tree computation — GetByRole(Link, "عرض")
+                // hangs in locator resolution for the full timeout even
+                // though the element is visibly present and clickable
+                // (confirmed via a Playwright trace during investigation).
+                // This selector matches the element directly via its raw
+                // markup instead, bypassing the accessibility tree
+                // entirely. Do not revert to GetByRole here.
+                await page.Locator("a.action-btn.view").First.ClickAsync();
                 await page.WaitForURLAsync("**/admin/laundries/*/view");
-                _logger.LogWarning("AdminDashboardCheck {SiteId}: WaitForURLAsync returned at {ElapsedMs}ms", site.Id, stopwatch.ElapsedMilliseconds);
             })
         };
 
@@ -446,7 +442,10 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         if (message.Contains("Timeout", StringComparison.OrdinalIgnoreCase) &&
             message.Contains("exceeded", StringComparison.OrdinalIgnoreCase))
         {
-            return "The site did not respond in time.";
+            var detail = ExtractTimeoutDetail(message);
+            return detail is null
+                ? "The site did not respond in time."
+                : $"The site did not respond in time ({detail}).";
         }
 
         var firstLine = message
@@ -469,12 +468,37 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         if (message.Contains("Timeout", StringComparison.OrdinalIgnoreCase) &&
             message.Contains("exceeded", StringComparison.OrdinalIgnoreCase))
         {
-            return $"{elementLabel} was not found";
+            var detail = ExtractTimeoutDetail(message);
+            return detail is null
+                ? $"{elementLabel} was not found"
+                : $"{elementLabel} was not found ({detail})";
         }
 
         return message
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault() ?? "an unexpected error occurred";
+    }
+
+    // Every "Timeout ... exceeded" message used to collapse to the same
+    // generic wording regardless of why Playwright gave up — which is what
+    // hid the AdminDashboardCheck stall for most of a debugging session: the
+    // real cause (GetByRole hanging in accessibility-tree resolution because
+    // of an unrelated JS error on the page) looked identical to an element
+    // genuinely never appearing. When Playwright has more context it attaches
+    // a multi-line call log ("- waiting for locator(...)", "- element is not
+    // stable", etc.); this returns the last such line — Playwright's
+    // last-known state before it gave up — so the stored ErrorMessage carries
+    // that hint instead of discarding it. Bare timeout messages (no call log,
+    // as seen during this investigation with Force+a short timeout) have
+    // nothing to extract and return null, leaving the generic wording as-is.
+    private static string? ExtractTimeoutDetail(string message)
+    {
+        var callLogLines = message
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => line.StartsWith("- ", StringComparison.Ordinal))
+            .ToList();
+
+        return callLogLines.Count > 0 ? callLogLines[^1][2..] : null;
     }
 
     private async Task<IBrowser> GetBrowserAsync(CancellationToken ct)
@@ -490,10 +514,7 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
             if (_browser is null)
             {
                 _playwright = await Playwright.CreateAsync();
-                // TEMPORARY — diagnostic only, flipped back to false so the run
-                // can be watched visually. MUST be reverted to true before this
-                // goes anywhere near production.
-                _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = false });
+                _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
             }
 
             return _browser;

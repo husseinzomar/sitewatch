@@ -41,3 +41,12 @@
   once — would have saved an hour of crash-loop debugging today (each
   missing Railway variable only surfaces one at a time, as whatever
   breaks first at startup).
+
+## Parked from the AdminDashboardCheck investigation
+- westcleanapp.com's own admin dashboard script.js throws an unhandled
+  "ReferenceError: sidebarToggle is not defined" at line 13 on every
+  page load (confirmed via a Playwright trace's console panel, seen
+  twice per load). Worth flagging to their dev team — it broke
+  Playwright's accessibility-tree computation for us, and may affect
+  real admin users too (e.g. a broken sidebar toggle), not just this
+  check.

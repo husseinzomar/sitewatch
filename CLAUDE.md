@@ -51,6 +51,14 @@ argument. Never commit the value; never print it in chat or logs.
   or changing.
 - Railway needs the ADO.NET connection string format, same as local — a
   libpq `postgresql://` URI crashes Hangfire at startup there too.
+- `GetByRole` can hang indefinitely (even with `Force = true` on the
+  subsequent click) if the target page has unhandled JS errors that
+  disrupt Playwright's accessibility-tree computation — the element is
+  visually present and clickable, but locator resolution itself never
+  finishes. If a locator hangs on a real, visually-present element,
+  check the page's console for JS errors before assuming the element or
+  the check logic is wrong, and try a CSS/data-attribute selector
+  instead of `GetByRole`.
 
 ## Status
 Day 1 done: scaffold, GitHub push, Railway deploy verified in production
@@ -125,5 +133,17 @@ Day 12 done: Flutter Web deployed to Cloudflare Pages
 production origin, R2 bucket CORS updated for the production origin too,
 all Railway variables set. Verified end-to-end in production, including
 from phone.
+
+AdminDashboardCheck done: CheckType.AdminDashboardCheck built, debugged,
+and verified against a real production site (West Clean admin panel,
+read-only — never clicks Edit/Save). Root cause of a multi-hour
+investigation was the target site's own unhandled JS error
+("sidebarToggle is not defined") breaking Playwright's accessibility-tree
+resolution, making GetByRole hang indefinitely on a visually-present,
+clickable element; worked around with a CSS selector on the affected
+step (documented in code and IDEAS.md). Investigation also produced a
+lasting improvement: DescribeFailure/DescribeStepFailure now preserve
+Playwright's own timeout call-log detail instead of collapsing every
+timeout to the same generic message.
 
 Next: Day 13 — README and demo video.
