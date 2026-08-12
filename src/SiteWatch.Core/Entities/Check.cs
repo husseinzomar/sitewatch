@@ -10,7 +10,8 @@ public enum CheckType
     AdminDashboardCheck,
     AdminOverviewCheck,
     AdminOrdersCheck,
-    AdminUsersCheck
+    AdminUsersCheck,
+    AdminOrderDetailCheck
 }
 
 public class Check

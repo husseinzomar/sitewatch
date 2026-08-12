@@ -30,6 +30,13 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
     // Site.Url entirely.
     private const string WestCleanAdminLoginUrl = "https://westcleanapp.com/ar/admin/login";
 
+    // AdminOrderDetailCheck's target — hardcoded to order id 97, the
+    // confirmed-reproducing case for a known PHP ParseError bug (broken
+    // Blade template). Not "the first order" or any dynamic id: this check
+    // exists specifically to track whether this one known-bad page gets
+    // fixed, so it must keep hitting the same id every run.
+    private const string WestCleanOrderDetailUrl = "https://westcleanapp.com/ar/admin/orders/97";
+
     // Playwright's default headless context is trivially fingerprintable as
     // automation (navigator.webdriver: true, a UA containing "HeadlessChrome"),
     // which appears to trigger server-side bot-detection slowdowns against
@@ -64,6 +71,7 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         CheckType.AdminOverviewCheck => ExecuteAsync(site, RunAdminOverviewCheckAsync, ct),
         CheckType.AdminOrdersCheck => ExecuteAsync(site, RunAdminOrdersCheckAsync, ct),
         CheckType.AdminUsersCheck => ExecuteAsync(site, RunAdminUsersCheckAsync, ct),
+        CheckType.AdminOrderDetailCheck => ExecuteAsync(site, RunAdminOrderDetailCheckAsync, ct),
         _ => Task.FromResult(new CheckOutcome(CheckStatus.Error, 0, $"CheckType.{type} is not implemented yet.", null))
     };
 
@@ -610,6 +618,116 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         {
             var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
             return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the user management section but the users page did not load.", screenshotPath);
+        }
+
+        return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);
+    }
+
+    // Inverted from every other West Clean scenario: this one exists to track
+    // a KNOWN, already-confirmed bug (a PHP ParseError from a broken Blade
+    // template — "syntax error, unexpected token 'endforeach', expecting end
+    // of file" — reproduced live against /admin/orders/97 and confirmed not
+    // specific to that one order id). Failed here means "the bug is still
+    // there"; Passed means "it's been fixed". Read-only, same constraint as
+    // the other scenarios — this check only ever navigates, it never clicks
+    // anything that could modify data.
+    //
+    // Classification is HTTP status + raw body text, not a DOM selector:
+    // Ignition's error page is a large Vue-rendered bundle with no stable
+    // class names on the error text itself (confirmed live — the "ParseError"
+    // label is a bare <span> with no distinguishing attribute), so a CSS
+    // selector here would be just as fragile as GetByRole, for a different
+    // reason. Status + text content doesn't depend on Ignition's markup at
+    // all.
+    private async Task<CheckOutcome> RunAdminOrderDetailCheckAsync(Site site, IPage page, Stopwatch stopwatch)
+    {
+        var email = _configuration["Checks:WestCleanAdmin:Email"];
+        var password = _configuration["Checks:WestCleanAdmin:Password"];
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            return new CheckOutcome(
+                CheckStatus.Error,
+                (int)stopwatch.ElapsedMilliseconds,
+                "West Clean admin credentials (Checks:WestCleanAdmin:Email / Checks:WestCleanAdmin:Password) are not configured.",
+                null);
+        }
+
+        var steps = new (string Description, string ElementLabel, Func<Task> Action)[]
+        {
+            ("reach the site", "", () => page.GotoAsync(WestCleanAdminLoginUrl)),
+            LoginStep(page, email, password)
+        };
+
+        foreach (var (description, elementLabel, action) in steps)
+        {
+            try
+            {
+                await action();
+            }
+            catch (PlaywrightException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+            catch (TimeoutException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+
+            if (BudgetExceededOutcome(stopwatch) is { } budgetOutcome)
+            {
+                return budgetOutcome;
+            }
+        }
+
+        IResponse? response;
+        try
+        {
+            response = await page.GotoAsync(WestCleanOrderDetailUrl);
+        }
+        catch (PlaywrightException ex)
+        {
+            return await FailedStepAsync(page, site.Id, stopwatch, "open the order detail page", "the order detail page", ex);
+        }
+        catch (TimeoutException ex)
+        {
+            return await FailedStepAsync(page, site.Id, stopwatch, "open the order detail page", "the order detail page", ex);
+        }
+
+        if (BudgetExceededOutcome(stopwatch) is { } detailBudgetOutcome)
+        {
+            return detailBudgetOutcome;
+        }
+
+        if (response is null)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "The order detail page did not return a response.", screenshotPath);
+        }
+
+        var bodyText = await page.Locator("body").InnerTextAsync();
+        var matchesKnownParseError = response.Status == 500
+            && bodyText.Contains("ParseError", StringComparison.Ordinal)
+            && bodyText.Contains("endforeach", StringComparison.Ordinal);
+
+        if (matchesKnownParseError)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(
+                CheckStatus.Failed,
+                (int)stopwatch.ElapsedMilliseconds,
+                "KNOWN ISSUE: order detail page still shows a server error (PHP ParseError: unexpected 'endforeach' in view.blade.php) instead of order details. This is a tracked bug, not a new failure.",
+                screenshotPath);
+        }
+
+        if (response.Status is < 200 or >= 300)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(
+                CheckStatus.Failed,
+                (int)stopwatch.ElapsedMilliseconds,
+                $"Order detail page responded with HTTP {response.Status}. This does not match the known ParseError signature — may be a new, different issue.",
+                screenshotPath);
         }
 
         return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);

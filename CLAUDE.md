@@ -160,4 +160,52 @@ dashboard, orders, and user management. All four remain manual-only
 (not scheduled, not auto-created by POST /sites) — running them
 requires a Check row of that type inserted directly, same as before.
 
+Fifth West Clean scenario added: AdminOrderDetailCheck, inverted from the
+other four — it tracks a real, already-confirmed production bug (PHP
+ParseError on /admin/orders/97, a broken Blade template) rather than
+verifying health. Detects via HTTP status + raw body text ("ParseError",
+"endforeach"), not a DOM selector — Laravel Ignition's debug error page
+has no stable class names to hang a CSS selector on. Currently Failed by
+design (bug confirmed present in production, verified live with a
+captured screenshot); expected to flip to Passed once West Clean fixes
+the template. Investigation also surfaced a separate, higher-priority
+security issue — APP_DEBUG=true exposing full Ignition debug pages to
+any visitor who triggers a 500, not just the ParseError case — logged
+in IDEAS.md, flagged for the client separately from the bug itself.
+
 Next: Day 13 — README and demo video.
+
+## Product Direction — Do Not Skip This
+
+Current phase: OBSERVATION WEEK. No new features, no new scenarios, no
+scope expansion — starting 2026-08-12, for one week.
+
+Context: SiteWatch's technical foundation is complete (auth, monitoring
+engine, scheduling, alerts, screenshot storage, Flutter Web frontend).
+The current priority is proving value with one real customer (West
+Clean, laundry service — contact: Abu Sultan) before any further build
+work, pricing conversation, or partnership commitment.
+
+Four read-only scenarios are built and verified against West Clean's
+real production admin panel (AdminDashboardCheck, AdminOverviewCheck,
+AdminOrdersCheck, AdminUsersCheck). They must run daily and unattended
+for a week so real pass/fail data can be collected before talking to the
+client again.
+
+Hard rule, permanent, not just for this week: scheduled/automated checks
+are READ-ONLY, always. Never click Edit, Save, Delete, or any
+data-modifying control in an automated scenario. This applies to every
+future site, not just West Clean.
+
+Two things explicitly OUT OF SCOPE right now — do not suggest starting
+either unless the user explicitly asks:
+1. Mobile app testing for West Clean's customer/laundry apps (Flutter,
+   integration_test) — blocked on source-code access from a third-party
+   developer, not a coding task.
+2. A dedicated SiteWatch mobile app (vs. the existing Flutter Web
+   frontend) — requested by the client, deferred until partnership
+   direction is clearer.
+
+If asked to start new feature work this week, first ask whether this is
+part of the observation week or a deliberate exception — don't just
+proceed.

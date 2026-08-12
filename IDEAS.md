@@ -50,3 +50,16 @@
   Playwright's accessibility-tree computation for us, and may affect
   real admin users too (e.g. a broken sidebar toggle), not just this
   check.
+
+## Parked from the AdminOrderDetailCheck investigation — SECURITY
+- westcleanapp.com production has APP_DEBUG=true (or equivalent), so any
+  uncaught 500 — not just the known order-detail ParseError — renders a
+  full Laravel Ignition debug page instead of a generic error page.
+  Confirmed live: file paths (resources/views/admin/orders/view.blade.php),
+  full stack trace, PHP/framework version, and Ignition's CONTEXT/DEBUG
+  tabs are all visible. This is reachable by any visitor who triggers a
+  server error, not just authenticated admins. Report to the client as
+  its own item, higher priority than and independent of the ParseError
+  bug — turning APP_DEBUG off doesn't require fixing the Blade template,
+  and the exposure would persist for any other future 500 regardless of
+  this specific bug.
