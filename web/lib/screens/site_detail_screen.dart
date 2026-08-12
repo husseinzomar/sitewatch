@@ -4,17 +4,46 @@ import 'package:go_router/go_router.dart';
 
 import '../api/models/check_result_response.dart';
 import '../api/models/site_response.dart';
+import '../auth/auth_controller.dart';
 import '../sites/screenshot_url_provider.dart';
 import '../sites/site_results_provider.dart';
 import '../utils/relative_time.dart';
 
-class SiteDetailScreen extends ConsumerWidget {
+class SiteDetailScreen extends ConsumerStatefulWidget {
   final SiteResponse site;
 
   const SiteDetailScreen({super.key, required this.site});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SiteDetailScreen> createState() => _SiteDetailScreenState();
+}
+
+class _SiteDetailScreenState extends ConsumerState<SiteDetailScreen> {
+  // Per-type, not a single global flag: triggering one check type shouldn't
+  // block clicking another's button while it's still running.
+  final Set<CheckType> _runningTypes = {};
+
+  Future<void> _runCheck(CheckType type) async {
+    setState(() => _runningTypes.add(type));
+    try {
+      await ref.read(apiClientProvider).runCheck(widget.site.id, type);
+      ref.invalidate(siteResultsProvider(widget.site.id));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to trigger check.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _runningTypes.remove(type));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final site = widget.site;
     final resultsAsync = ref.watch(siteResultsProvider(site.id));
 
     return Scaffold(
@@ -44,6 +73,16 @@ class SiteDetailScreen extends ConsumerWidget {
               ],
             ),
           ),
+          resultsAsync.maybeWhen(
+            data: (results) => results.isEmpty
+                ? const SizedBox.shrink()
+                : _RunCheckButtons(
+                    results: results,
+                    runningTypes: _runningTypes,
+                    onRun: _runCheck,
+                  ),
+            orElse: () => const SizedBox.shrink(),
+          ),
           const Divider(height: 1),
           Expanded(
             child: resultsAsync.when(
@@ -59,6 +98,104 @@ class SiteDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+class _RunCheckButtons extends StatelessWidget {
+  final List<CheckResultResponse> results;
+  final Set<CheckType> runningTypes;
+  final void Function(CheckType type) onRun;
+
+  const _RunCheckButtons({
+    required this.results,
+    required this.runningTypes,
+    required this.onRun,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Distinct types present in the currently loaded results, in a fixed,
+    // sensible order (enum declaration order — page/checkout basics first,
+    // then the West Clean admin scenarios) rather than result order, so the
+    // row doesn't reshuffle as new results come in.
+    final types = CheckType.values.where((t) => results.any((r) => r.checkType == t)).toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final type in types)
+            _RunCheckButton(
+              type: type,
+              isRunning: runningTypes.contains(type),
+              onPressed: () => onRun(type),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RunCheckButton extends StatelessWidget {
+  final CheckType type;
+  final bool isRunning;
+  final VoidCallback onPressed;
+
+  const _RunCheckButton({
+    required this.type,
+    required this.isRunning,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // AdminOrderDetailCheck tracks a known, already-confirmed bug — its
+    // Failed means "bug still present", the opposite of every other check's
+    // Failed. Visually distinct so that isn't misread at a glance.
+    final isKnownIssueCheck = type == CheckType.adminOrderDetailCheck;
+
+    final label = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isRunning)
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else
+          const Icon(Icons.play_arrow, size: 16),
+        const SizedBox(width: 6),
+        Text('Run ${type.displayLabel}'),
+        if (isKnownIssueCheck) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'Known issue',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    return isKnownIssueCheck
+        ? OutlinedButton(
+            onPressed: isRunning ? null : onPressed,
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.orange.shade800),
+            child: label,
+          )
+        : OutlinedButton(
+            onPressed: isRunning ? null : onPressed,
+            child: label,
+          );
   }
 }
 

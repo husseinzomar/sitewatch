@@ -422,7 +422,7 @@ app.MapGet("/sites/{id:guid}/results", async (Guid id, ClaimsPrincipal user, Sit
         .Where(r => r.Check.SiteId == id)
         .OrderByDescending(r => r.RanAt)
         .Take(MaxResultsReturned)
-        .Select(r => new CheckResultResponse(r.Id, r.CheckId, r.Status, r.DurationMs, r.ErrorMessage, r.ScreenshotPath, r.RanAt))
+        .Select(r => new CheckResultResponse(r.Id, r.CheckId, r.Check.Type, r.Status, r.DurationMs, r.ErrorMessage, r.ScreenshotPath, r.RanAt))
         .ToListAsync();
 
     return Results.Ok(results);
@@ -475,39 +475,38 @@ app.MapGet("/sites/{id:guid}/results/{resultId:guid}/screenshot", async (Guid id
 .Produces(StatusCodes.Status404NotFound)
 .Produces(StatusCodes.Status401Unauthorized);
 
-if (app.Environment.IsDevelopment())
+// Originally dev-only (manual trigger for testing checks now that Hangfire
+// drives the daily schedule). Now exposed in every environment so the
+// frontend can offer a "Run Check Now" button: the auth boundary here isn't
+// the environment flag, it's RequireAuthorization() plus the ownership-scoped
+// lookup below (Site.UserId == userId, then Check.SiteId == id) — a user can
+// only ever trigger a check on a site they own, 404 otherwise, exactly like
+// every other /sites/{id}/... endpoint.
+app.MapPost("/sites/{id:guid}/run-check", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, CheckExecutionService executionService, CancellationToken ct, CheckType type = CheckType.PageLoad) =>
 {
-    // Temporary: manual trigger for testing checks now that Hangfire drives
-    // the daily schedule. Kept per Day 7 scope — still useful for on-demand
-    // testing, including CheckType.CheckoutFlow, which isn't enabled for
-    // scheduling. Now persists a CheckResult via CheckExecutionService
-    // instead of just returning the outcome.
-    app.MapPost("/sites/{id:guid}/run-check", async (Guid id, ClaimsPrincipal user, SiteWatchDbContext db, CheckExecutionService executionService, CancellationToken ct, CheckType type = CheckType.PageLoad) =>
+    if (!TryGetUserId(user, out var userId))
     {
-        if (!TryGetUserId(user, out var userId))
-        {
-            return Results.Unauthorized();
-        }
+        return Results.Unauthorized();
+    }
 
-        var site = await db.Sites.SingleOrDefaultAsync(s => s.Id == id && s.UserId == userId, ct);
-        if (site is null)
-        {
-            return Results.NotFound();
-        }
+    var site = await db.Sites.SingleOrDefaultAsync(s => s.Id == id && s.UserId == userId, ct);
+    if (site is null)
+    {
+        return Results.NotFound();
+    }
 
-        var check = await db.Checks.SingleOrDefaultAsync(c => c.SiteId == id && c.Type == type, ct);
-        if (check is null)
-        {
-            return Results.NotFound();
-        }
+    var check = await db.Checks.SingleOrDefaultAsync(c => c.SiteId == id && c.Type == type, ct);
+    if (check is null)
+    {
+        return Results.NotFound();
+    }
 
-        var outcome = await executionService.ExecuteAsync(check.Id, isScheduled: false, ct);
-        return outcome is null
-            ? Results.Ok(new { skipped = true })
-            : Results.Ok(outcome);
-    })
-    .RequireAuthorization();
-}
+    var outcome = await executionService.ExecuteAsync(check.Id, isScheduled: false, ct);
+    return outcome is null
+        ? Results.Ok(new { skipped = true })
+        : Results.Ok(outcome);
+})
+.RequireAuthorization();
 
 app.Run();
 
@@ -546,5 +545,5 @@ record RegisterResponse(Guid Id);
 record LoginResponse(string Token);
 record MeResponse(Guid Id, string Email);
 record SiteResponse(Guid Id, string Name, string Url, bool IsActive, DateTimeOffset CreatedAt);
-record CheckResultResponse(Guid Id, Guid CheckId, CheckStatus Status, int DurationMs, string? ErrorMessage, string? ScreenshotPath, DateTimeOffset RanAt);
+record CheckResultResponse(Guid Id, Guid CheckId, CheckType CheckType, CheckStatus Status, int DurationMs, string? ErrorMessage, string? ScreenshotPath, DateTimeOffset RanAt);
 record ScreenshotUrlResponse(string Url);

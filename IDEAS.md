@@ -63,3 +63,10 @@
   bug — turning APP_DEBUG off doesn't require fixing the Blade template,
   and the exposure would persist for any other future 500 regardless of
   this specific bug.
+
+## Parked from the manual-trigger-from-frontend session
+- Manual /run-check has no rate limiting; a malicious or careless user
+  could trigger many browser launches in quick succession (each is a real
+  Playwright Chromium launch, not a cheap HTTP call). Deliberately out of
+  scope for that task — needs a real cooldown/rate-limit design, not a
+  quick bolt-on.

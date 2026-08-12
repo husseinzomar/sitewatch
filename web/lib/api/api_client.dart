@@ -101,6 +101,14 @@ class ApiClient {
     return list.map((e) => CheckResultResponse.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  // Fire-and-refresh: the caller doesn't need the outcome payload itself,
+  // just success/failure — it re-fetches results via siteResultsProvider
+  // afterwards to pick up the new CheckResult row.
+  Future<void> runCheck(String siteId, CheckType type) async {
+    final response = await _post('/sites/$siteId/run-check?type=${type.apiValue}', {});
+    _throwIfNotOk(response);
+  }
+
   // The endpoint returns the presigned URL as JSON rather than a 302:
   // browsers don't let JS read the Location header of a cross-origin
   // redirect (or expose the redirect to the caller at all), so following

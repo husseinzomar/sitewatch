@@ -160,18 +160,27 @@ dashboard, orders, and user management. All four remain manual-only
 (not scheduled, not auto-created by POST /sites) — running them
 requires a Check row of that type inserted directly, same as before.
 
-Fifth West Clean scenario added: AdminOrderDetailCheck, inverted from the
-other four — it tracks a real, already-confirmed production bug (PHP
-ParseError on /admin/orders/97, a broken Blade template) rather than
-verifying health. Detects via HTTP status + raw body text ("ParseError",
-"endforeach"), not a DOM selector — Laravel Ignition's debug error page
-has no stable class names to hang a CSS selector on. Currently Failed by
-design (bug confirmed present in production, verified live with a
-captured screenshot); expected to flip to Passed once West Clean fixes
-the template. Investigation also surfaced a separate, higher-priority
-security issue — APP_DEBUG=true exposing full Ignition debug pages to
-any visitor who triggers a 500, not just the ParseError case — logged
-in IDEAS.md, flagged for the client separately from the bug itself.
+Fifth West Clean scenario (AdminOrderDetailCheck) and manual check
+triggering shipped across two sessions. AdminOrderDetailCheck tracks a
+real, confirmed production bug (PHP ParseError on order detail pages)
+via HTTP status + body text, not a DOM selector — Failed here means
+"bug still there," not "check broken," and is expected to flip to
+Passed once West Clean fixes the template. Separately flagged: the site
+runs with APP_DEBUG=true, exposing full Laravel Ignition debug pages
+(file paths, stack traces) on any 500, not just this bug — logged in
+IDEAS.md as a distinct, higher-priority item for the client.
+
+Manual check triggering added end-to-end: /run-check is no longer
+dev-only (RequireAuthorization + the ownership-scoped Check lookup is
+the real auth boundary, not the environment flag); CheckResultResponse
+now carries CheckType; the site detail screen renders a "Run Check Now"
+button per check type present in a site's results (derived from loaded
+results, not a new endpoint), each with independent loading/disabled
+state, auto-refreshing siteResultsProvider on completion.
+AdminOrderDetailCheck's button is visually distinct (orange, "Known
+issue" badge) since its Failed is inverted from every other check's.
+No rate limiting on manual triggering yet — flagged in IDEAS.md as a
+real concern for later, deliberately out of scope for now.
 
 Next: Day 13 — README and demo video.
 
