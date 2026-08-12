@@ -61,6 +61,9 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         CheckType.PageLoad => ExecuteAsync(site, RunPageLoadAsync, ct),
         CheckType.CheckoutFlow => ExecuteAsync(site, RunCheckoutFlowAsync, ct),
         CheckType.AdminDashboardCheck => ExecuteAsync(site, RunAdminDashboardCheckAsync, ct),
+        CheckType.AdminOverviewCheck => ExecuteAsync(site, RunAdminOverviewCheckAsync, ct),
+        CheckType.AdminOrdersCheck => ExecuteAsync(site, RunAdminOrdersCheckAsync, ct),
+        CheckType.AdminUsersCheck => ExecuteAsync(site, RunAdminUsersCheckAsync, ct),
         _ => Task.FromResult(new CheckOutcome(CheckStatus.Error, 0, $"CheckType.{type} is not implemented yet.", null))
     };
 
@@ -370,6 +373,243 @@ public class PlaywrightCheckRunner : ICheckRunner, IAsyncDisposable
         {
             var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
             return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the laundries section but the laundry detail page did not load.", screenshotPath);
+        }
+
+        return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);
+    }
+
+    // Shared login step for the read-only West Clean admin scenarios below.
+    // Waits on the sidebar nav (present only once authenticated) as a generic
+    // post-login confirmation rather than any single link, since each caller
+    // navigates to a different section next.
+    //
+    // CSS, not GetByRole: this wait happens inside the authenticated admin
+    // layout, where the site's own unhandled "sidebarToggle is not defined"
+    // error breaks Playwright's accessibility-tree computation and hangs
+    // GetByRole locator resolution on a visually-present, clickable element
+    // (see RunAdminDashboardCheckAsync's laundries-link comment — confirmed
+    // this error fires on every authenticated admin page, not just that one).
+    private static (string Description, string ElementLabel, Func<Task> Action) LoginStep(IPage page, string email, string password) =>
+        ("log in", "the login form", async () =>
+        {
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "البريد الإلكتروني" }).FillAsync(email);
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "كلمة المرور" }).FillAsync(password);
+            await page.GetByRole(AriaRole.Button, new() { Name = "تسجيل الدخول" }).ClickAsync();
+            await page.Locator(".nav-menu").WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible
+            });
+        });
+
+    // Read-only, same constraint as RunAdminDashboardCheckAsync: only ever
+    // navigates via the sidebar nav link, never clicks "تعديل", Save, or any
+    // other data-modifying control.
+    private async Task<CheckOutcome> RunAdminOverviewCheckAsync(Site site, IPage page, Stopwatch stopwatch)
+    {
+        var email = _configuration["Checks:WestCleanAdmin:Email"];
+        var password = _configuration["Checks:WestCleanAdmin:Password"];
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            return new CheckOutcome(
+                CheckStatus.Error,
+                (int)stopwatch.ElapsedMilliseconds,
+                "West Clean admin credentials (Checks:WestCleanAdmin:Email / Checks:WestCleanAdmin:Password) are not configured.",
+                null);
+        }
+
+        var steps = new (string Description, string ElementLabel, Func<Task> Action)[]
+        {
+            ("reach the site", "", () => page.GotoAsync(WestCleanAdminLoginUrl)),
+            LoginStep(page, email, password),
+            ("open the dashboard overview", "the dashboard nav link", async () =>
+            {
+                // data-page attribute, not GetByRole — same accessibility-tree
+                // hang risk as the login step, within the authenticated layout.
+                await page.Locator("a.nav-item[data-page=\"home\"]").ClickAsync();
+                await page.WaitForURLAsync("**/admin/dashboard");
+            })
+        };
+
+        foreach (var (description, elementLabel, action) in steps)
+        {
+            try
+            {
+                await action();
+            }
+            catch (PlaywrightException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+            catch (TimeoutException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+
+            if (BudgetExceededOutcome(stopwatch) is { } budgetOutcome)
+            {
+                return budgetOutcome;
+            }
+        }
+
+        try
+        {
+            // Verified live against the authenticated dashboard's single <h1>.
+            await page.Locator("h1", new PageLocatorOptions { HasTextString = "مرحباً بك في لوحة التحكم" }).WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = PerOperationTimeoutMs
+            });
+        }
+        catch (PlaywrightException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the dashboard link but the overview page did not load.", screenshotPath);
+        }
+        catch (TimeoutException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the dashboard link but the overview page did not load.", screenshotPath);
+        }
+
+        return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);
+    }
+
+    // Read-only, same constraint as above.
+    private async Task<CheckOutcome> RunAdminOrdersCheckAsync(Site site, IPage page, Stopwatch stopwatch)
+    {
+        var email = _configuration["Checks:WestCleanAdmin:Email"];
+        var password = _configuration["Checks:WestCleanAdmin:Password"];
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            return new CheckOutcome(
+                CheckStatus.Error,
+                (int)stopwatch.ElapsedMilliseconds,
+                "West Clean admin credentials (Checks:WestCleanAdmin:Email / Checks:WestCleanAdmin:Password) are not configured.",
+                null);
+        }
+
+        var steps = new (string Description, string ElementLabel, Func<Task> Action)[]
+        {
+            ("reach the site", "", () => page.GotoAsync(WestCleanAdminLoginUrl)),
+            LoginStep(page, email, password),
+            ("open orders", "the orders nav link", async () =>
+            {
+                await page.Locator("a.nav-item[data-page=\"orders\"]").ClickAsync();
+                await page.WaitForURLAsync("**/admin/orders");
+            })
+        };
+
+        foreach (var (description, elementLabel, action) in steps)
+        {
+            try
+            {
+                await action();
+            }
+            catch (PlaywrightException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+            catch (TimeoutException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+
+            if (BudgetExceededOutcome(stopwatch) is { } budgetOutcome)
+            {
+                return budgetOutcome;
+            }
+        }
+
+        try
+        {
+            // Verified live against the orders page's single <h1>.
+            await page.Locator("h1", new PageLocatorOptions { HasTextString = "طلبات خدمات الغسيل" }).WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = PerOperationTimeoutMs
+            });
+        }
+        catch (PlaywrightException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the orders section but the orders page did not load.", screenshotPath);
+        }
+        catch (TimeoutException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the orders section but the orders page did not load.", screenshotPath);
+        }
+
+        return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);
+    }
+
+    // Read-only, same constraint as above.
+    private async Task<CheckOutcome> RunAdminUsersCheckAsync(Site site, IPage page, Stopwatch stopwatch)
+    {
+        var email = _configuration["Checks:WestCleanAdmin:Email"];
+        var password = _configuration["Checks:WestCleanAdmin:Password"];
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            return new CheckOutcome(
+                CheckStatus.Error,
+                (int)stopwatch.ElapsedMilliseconds,
+                "West Clean admin credentials (Checks:WestCleanAdmin:Email / Checks:WestCleanAdmin:Password) are not configured.",
+                null);
+        }
+
+        var steps = new (string Description, string ElementLabel, Func<Task> Action)[]
+        {
+            ("reach the site", "", () => page.GotoAsync(WestCleanAdminLoginUrl)),
+            LoginStep(page, email, password),
+            ("open user management", "the user management nav link", async () =>
+            {
+                await page.Locator("a.nav-item[data-page=\"users\"]").ClickAsync();
+                await page.WaitForURLAsync("**/admin/users");
+            })
+        };
+
+        foreach (var (description, elementLabel, action) in steps)
+        {
+            try
+            {
+                await action();
+            }
+            catch (PlaywrightException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+            catch (TimeoutException ex)
+            {
+                return await FailedStepAsync(page, site.Id, stopwatch, description, elementLabel, ex);
+            }
+
+            if (BudgetExceededOutcome(stopwatch) is { } budgetOutcome)
+            {
+                return budgetOutcome;
+            }
+        }
+
+        try
+        {
+            // Verified live against the user management page's single <h1>.
+            await page.Locator("h1", new PageLocatorOptions { HasTextString = "إدارة المستخدمين" }).WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = PerOperationTimeoutMs
+            });
+        }
+        catch (PlaywrightException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the user management section but the users page did not load.", screenshotPath);
+        }
+        catch (TimeoutException)
+        {
+            var screenshotPath = await TryCaptureScreenshotAsync(page, site.Id, stopwatch);
+            return new CheckOutcome(CheckStatus.Failed, (int)stopwatch.ElapsedMilliseconds, "Reached the user management section but the users page did not load.", screenshotPath);
         }
 
         return new CheckOutcome(CheckStatus.Passed, (int)stopwatch.ElapsedMilliseconds, null, null);

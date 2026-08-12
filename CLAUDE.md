@@ -146,4 +146,18 @@ lasting improvement: DescribeFailure/DescribeStepFailure now preserve
 Playwright's own timeout call-log detail instead of collapsing every
 timeout to the same generic message.
 
+Three more read-only West Clean admin scenarios added: AdminOverviewCheck,
+AdminOrdersCheck, AdminUsersCheck (enum values 3/4/5), all verified
+Passed against production (3207ms / 2751ms / 2911ms — well under
+AdminDashboardCheck's 6-8s, confirming CSS selectors chosen up front
+avoid the accessibility-tree hang entirely). Selectors (nav links via
+data-page attribute, heading text) were confirmed against the live DOM
+via claude-in-chrome before being written, not guessed. Login step
+factored into a shared LoginStep helper reused by all three, without
+touching the existing AdminDashboardCheck method. Four total custom
+scenarios now cover West Clean's admin panel end to end: login,
+dashboard, orders, and user management. All four remain manual-only
+(not scheduled, not auto-created by POST /sites) — running them
+requires a Check row of that type inserted directly, same as before.
+
 Next: Day 13 — README and demo video.

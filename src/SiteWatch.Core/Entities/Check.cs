@@ -7,7 +7,10 @@ public enum CheckType
     // Appended, never inserted: this enum is stored as int in Postgres
     // (.HasConversion<int>()), so reordering would silently corrupt the
     // meaning of existing PageLoad/CheckoutFlow rows.
-    AdminDashboardCheck
+    AdminDashboardCheck,
+    AdminOverviewCheck,
+    AdminOrdersCheck,
+    AdminUsersCheck
 }
 
 public class Check
