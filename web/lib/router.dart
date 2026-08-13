@@ -6,8 +6,11 @@ import 'api/models/site_response.dart';
 import 'auth/auth_controller.dart';
 import 'auth/auth_state.dart';
 import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
 import 'screens/site_detail_screen.dart';
 import 'screens/sites_list_screen.dart';
+
+const _unauthenticatedRoutes = {'/login', '/register'};
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
@@ -22,18 +25,19 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final isAuthenticated = ref.read(authControllerProvider) is AuthAuthenticated;
-      final isLoggingIn = state.matchedLocation == '/login';
+      final isUnauthenticatedRoute = _unauthenticatedRoutes.contains(state.matchedLocation);
 
-      if (!isAuthenticated && !isLoggingIn) {
+      if (!isAuthenticated && !isUnauthenticatedRoute) {
         return '/login';
       }
-      if (isAuthenticated && isLoggingIn) {
+      if (isAuthenticated && isUnauthenticatedRoute) {
         return '/';
       }
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
       GoRoute(path: '/', builder: (context, state) => const SitesListScreen()),
       GoRoute(
         path: '/sites/:id',

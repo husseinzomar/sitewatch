@@ -39,6 +39,28 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  Future<void> register(String email, String password) async {
+    final apiClient = ref.read(apiClientProvider);
+    state = const AuthLoading();
+
+    try {
+      await apiClient.register(email, password);
+      // No token on register — reuse login() to authenticate with the
+      // credentials that were just created.
+      await login(email, password);
+    } on EmailTakenException {
+      state = const AuthError('Email is already registered.');
+    } on ApiValidationException catch (e) {
+      state = AuthError(e.message);
+    } on NetworkException {
+      apiClient.setToken(null);
+      state = const AuthError('Could not reach the server. Check your connection and try again.');
+    } catch (_) {
+      apiClient.setToken(null);
+      state = const AuthError('Something went wrong. Please try again.');
+    }
+  }
+
   void logout() {
     // Guards against concurrent 401s (e.g. sites list + a delete in flight
     // when the token expires) both firing onUnauthorized and calling this

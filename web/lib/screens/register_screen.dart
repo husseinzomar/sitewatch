@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,14 +8,17 @@ import '../auth/auth_controller.dart';
 import '../auth/auth_state.dart';
 import '../widgets/wordmark.dart';
 
-class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+const int _minPasswordLength = 8;
+const int _maxPasswordBytes = 72;
+
+class RegisterScreen extends ConsumerStatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -25,11 +30,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  // Deliberately loose: catches obviously-empty or malformed input before a
+  // wasted round trip. The server (MailAddress) is the source of truth.
+  String? _validateEmail(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Email is required';
+    }
+    if (!value.contains('@') || !value.split('@').last.contains('.')) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
+    }
+    if (value.length < _minPasswordLength) {
+      return 'Password must be at least $_minPasswordLength characters';
+    }
+    if (utf8.encode(value).length > _maxPasswordBytes) {
+      return 'Password must be at most $_maxPasswordBytes bytes';
+    }
+    return null;
+  }
+
   void _submit() {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    ref.read(authControllerProvider.notifier).login(
+    ref.read(authControllerProvider.notifier).register(
           _emailController.text.trim(),
           _passwordController.text,
         );
@@ -57,16 +87,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     controller: _emailController,
                     decoration: const InputDecoration(labelText: 'Email'),
                     keyboardType: TextInputType.emailAddress,
-                    validator: (value) =>
-                        (value == null || value.isEmpty) ? 'Email is required' : null,
+                    validator: _validateEmail,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
                     decoration: const InputDecoration(labelText: 'Password'),
                     obscureText: true,
-                    validator: (value) =>
-                        (value == null || value.isEmpty) ? 'Password is required' : null,
+                    validator: _validatePassword,
                   ),
                   const SizedBox(height: 24),
                   if (authState is AuthError) ...[
@@ -84,12 +112,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Log in'),
+                        : const Text('Register'),
                   ),
                   const SizedBox(height: 16),
                   TextButton(
-                    onPressed: isLoading ? null : () => context.go('/register'),
-                    child: const Text("Don't have an account? Register"),
+                    onPressed: isLoading ? null : () => context.go('/login'),
+                    child: const Text('Already have an account? Log in'),
                   ),
                 ],
               ),

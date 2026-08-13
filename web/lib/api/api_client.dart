@@ -17,6 +17,8 @@ const String apiBaseUrl = String.fromEnvironment(
 
 class InvalidCredentialsException implements Exception {}
 
+class EmailTakenException implements Exception {}
+
 // A session that was valid and then wasn't — distinct from
 // InvalidCredentialsException (wrong password, no session ever existed).
 class UnauthorizedException implements Exception {}
@@ -61,6 +63,24 @@ class ApiClient {
     _throwIfNotOk(response);
 
     return LoginResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> register(String email, String password) async {
+    final response = await _post('/auth/register', {
+      'email': email,
+      'password': password,
+    });
+
+    // Checked before _throwIfNotOk, same reasoning as login()'s 401 check
+    // and createSite()'s 400 check: these are expected outcomes with their
+    // own messaging, not generic failures.
+    if (response.statusCode == 409) {
+      throw EmailTakenException();
+    }
+    if (response.statusCode == 400) {
+      throw ApiValidationException(_extractError(response));
+    }
+    _throwIfNotOk(response);
   }
 
   Future<MeResponse> getMe() async {
