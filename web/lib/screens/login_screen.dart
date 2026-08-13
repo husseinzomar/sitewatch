@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_controller.dart';
 import '../auth/auth_state.dart';
+import '../widgets/wordmark.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -39,7 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = authState is AuthLoading;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('SiteWatch')),
+      appBar: AppBar(title: const SiteWatchWordmark()),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),

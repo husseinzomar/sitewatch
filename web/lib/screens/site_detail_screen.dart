@@ -7,7 +7,10 @@ import '../api/models/site_response.dart';
 import '../auth/auth_controller.dart';
 import '../sites/screenshot_url_provider.dart';
 import '../sites/site_results_provider.dart';
+import '../theme/app_theme.dart';
 import '../utils/relative_time.dart';
+import '../widgets/status_badge.dart';
+import '../widgets/wordmark.dart';
 
 class SiteDetailScreen extends ConsumerStatefulWidget {
   final SiteResponse site;
@@ -51,22 +54,33 @@ class _SiteDetailScreenState extends ConsumerState<SiteDetailScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.sm,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(site.name, style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 4),
-                Text(site.url),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  site.url,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Colors.black54),
+                ),
+                const SizedBox(height: AppSpacing.xs),
                 Row(
                   children: [
                     Icon(
-                      site.isActive ? Icons.check_circle : Icons.pause_circle,
+                      site.isActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
                       size: 16,
-                      color: site.isActive ? Colors.green : Colors.grey,
+                      color: site.isActive ? AppColors.success : Colors.grey,
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: AppSpacing.xs),
                     Text(site.isActive ? 'Active' : 'Inactive'),
                   ],
                 ),
@@ -76,7 +90,7 @@ class _SiteDetailScreenState extends ConsumerState<SiteDetailScreen> {
           resultsAsync.maybeWhen(
             data: (results) => results.isEmpty
                 ? const SizedBox.shrink()
-                : _RunCheckButtons(
+                : _RunChecksCard(
                     results: results,
                     runningTypes: _runningTypes,
                     onRun: _runCheck,
@@ -101,16 +115,25 @@ class _SiteDetailScreenState extends ConsumerState<SiteDetailScreen> {
   }
 }
 
-class _RunCheckButtons extends StatelessWidget {
+// Grouped in a titled card rather than a loose row of buttons, so the five
+// check types read as one control surface ("here's what you can trigger")
+// instead of floating actions scattered on the page.
+class _RunChecksCard extends StatelessWidget {
   final List<CheckResultResponse> results;
   final Set<CheckType> runningTypes;
   final void Function(CheckType type) onRun;
 
-  const _RunCheckButtons({
+  const _RunChecksCard({
     required this.results,
     required this.runningTypes,
     required this.onRun,
   });
+
+  // Below this, a Wrap of 5+ buttons — one of them carrying a "Known issue"
+  // tag — doesn't reliably fit even one button's label per line without
+  // truncation. Full-width vertical stacking reads better on a phone than a
+  // cramped multi-row wrap.
+  static const _narrowBreakpoint = 480.0;
 
   @override
   Widget build(BuildContext context) {
@@ -121,18 +144,48 @@ class _RunCheckButtons extends StatelessWidget {
     final types = CheckType.values.where((t) => results.any((r) => r.checkType == t)).toList();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final type in types)
-            _RunCheckButton(
-              type: type,
-              isRunning: runningTypes.contains(type),
-              onPressed: () => onRun(type),
-            ),
-        ],
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Checks', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: AppSpacing.sm),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final buttons = [
+                    for (final type in types)
+                      _RunCheckButton(
+                        type: type,
+                        isRunning: runningTypes.contains(type),
+                        onPressed: () => onRun(type),
+                      ),
+                  ];
+
+                  if (constraints.maxWidth < _narrowBreakpoint) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final button in buttons) ...[
+                          button,
+                          if (button != buttons.last) const SizedBox(height: AppSpacing.sm),
+                        ],
+                      ],
+                    );
+                  }
+
+                  return Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: buttons,
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -156,6 +209,9 @@ class _RunCheckButton extends StatelessWidget {
     // Failed. Visually distinct so that isn't misread at a glance.
     final isKnownIssueCheck = type == CheckType.adminOrderDetailCheck;
 
+    // Flexible + ellipsis on the label text: a safety net so a constrained
+    // width (narrow stacked layout, or an unexpectedly long future check
+    // name) truncates gracefully instead of a RenderFlex pixel overflow.
     final label = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -166,36 +222,28 @@ class _RunCheckButton extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           )
         else
-          const Icon(Icons.play_arrow, size: 16),
+          const Icon(Icons.play_arrow_rounded, size: 16),
         const SizedBox(width: 6),
-        Text('Run ${type.displayLabel}'),
+        Flexible(
+          child: Text('Run ${type.displayLabel}', overflow: TextOverflow.ellipsis),
+        ),
         if (isKnownIssueCheck) ...[
           const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Text(
-              'Known issue',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange),
-            ),
-          ),
+          const KnownIssueBadge(),
         ],
       ],
     );
 
-    return isKnownIssueCheck
-        ? OutlinedButton(
-            onPressed: isRunning ? null : onPressed,
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.orange.shade800),
-            child: label,
-          )
-        : OutlinedButton(
-            onPressed: isRunning ? null : onPressed,
-            child: label,
-          );
+    return OutlinedButton(
+      onPressed: isRunning ? null : onPressed,
+      style: isKnownIssueCheck
+          ? OutlinedButton.styleFrom(
+              foregroundColor: AppColors.caution,
+              side: BorderSide(color: AppColors.caution.withValues(alpha: 0.5)),
+            )
+          : null,
+      child: label,
+    );
   }
 }
 
@@ -208,13 +256,13 @@ class SiteNotFoundScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('SiteWatch')),
+      appBar: AppBar(title: const SiteWatchWordmark()),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('Site not found.'),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.md),
             FilledButton(
               onPressed: () => context.go('/'),
               child: const Text('Back to sites'),
@@ -247,7 +295,7 @@ class _ErrorResults extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text('Could not load check results.'),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.md),
           FilledButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
@@ -263,8 +311,10 @@ class _ResultsListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       itemCount: results.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) => _ResultTile(siteId: siteId, result: results[index]),
     );
   }
@@ -278,56 +328,51 @@ class _ResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isKnownIssueCheck = result.checkType == CheckType.adminOrderDetailCheck;
+
     return ListTile(
-      leading: _StatusBadge(status: result.status),
-      title: Tooltip(
-        message: formatAbsoluteUtc(result.ranAt),
-        child: Text(formatRelativeTime(result.ranAt)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+      leading: StatusBadge(status: result.status),
+      title: Row(
+        children: [
+          Flexible(
+            child: Tooltip(
+              message: formatAbsoluteUtc(result.ranAt),
+              child: Text(
+                formatRelativeTime(result.ranAt),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          if (isKnownIssueCheck) ...[
+            const SizedBox(width: AppSpacing.sm),
+            const KnownIssueBadge(),
+          ],
+        ],
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${result.durationMs} ms'),
+          Text(
+            '${result.checkType.displayLabel} • ${result.durationMs} ms',
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          ),
           if (result.errorMessage != null)
-            Text(
-              result.errorMessage!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                result.errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
           if (result.screenshotPath != null)
             Padding(
-              padding: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
               child: _ScreenshotThumbnail(siteId: siteId, resultId: result.id),
             ),
         ],
       ),
       isThreeLine: result.errorMessage != null || result.screenshotPath != null,
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final CheckStatus status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
-      CheckStatus.passed => ('Passed', Colors.green),
-      CheckStatus.failed => ('Failed', Colors.red),
-      CheckStatus.error => ('Error', Colors.amber.shade800),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
-      ),
     );
   }
 }

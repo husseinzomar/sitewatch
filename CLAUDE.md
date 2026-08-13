@@ -182,6 +182,38 @@ issue" badge) since its Failed is inverted from every other check's.
 No rate limiting on manual triggering yet — flagged in IDEAS.md as a
 real concern for later, deliberately out of scope for now.
 
+Visual polish pass on the Flutter Web frontend: custom "Reliability
+Teal" ColorScheme (no more default Material purple, no scattered
+Colors.red/green literals — status/known-issue colors live in
+AppColors), Space Grotesk (headings/wordmark) + Inter (body/data) via
+google_fonts, a wordmark component, consistent spacing tokens
+(AppSpacing), a titled "Checks" card grouping the run buttons instead of
+a loose row, redesigned status pills, and a shared KnownIssueBadge used
+identically on both the AdminOrderDetailCheck run button and its result
+rows. Two real bugs fixed during this pass: card/background contrast
+was too subtle (background darkened, card given a real shadow+border),
+and the Checks button row overflowed at phone width (375px) — caught by
+a Flutter widget test that sets an exact logical viewport directly
+(browser-window resize automation doesn't work reliably on this
+machine), which also caught a second, unflagged overflow in the results
+list rows. Both fixed with Flexible+ellipsis; test asserts zero overflow
+at 375px and 1440px, see web/test/site_detail_screen_responsive_test.dart.
+
+West Clean's five admin scenarios are now real daily Hangfire recurring
+jobs, not just manual-trigger-only: their Check rows were inserted
+directly via SQL, which never registers a recurring job (only
+POST /sites does that — confirmed by reading the code, not assumed).
+Registered via a temporary dev-only diagnostic endpoint (added, used to
+get ground truth from Hangfire's actual recurring-job registry, then
+fully removed — zero net diff in Program.cs). Also caught and fixed two
+data anomalies surfaced by that diagnostic: the same SQL update had
+unintentionally flipped CheckoutFlow.IsEnabled to true (restored to
+false — it stays manual-only, per Day 6/7 intent, not part of what was
+asked for), and there was an 8th Check row with Type=7, which doesn't
+exist in the CheckType enum (0-6 only) — deleted as a stray artifact.
+Confirmed via the live Hangfire dashboard: 13 total recurring jobs (was
+8, +5), all daily UTC cron, next execution "in a day."
+
 Next: Day 13 — README and demo video.
 
 ## Product Direction — Do Not Skip This
@@ -195,11 +227,14 @@ The current priority is proving value with one real customer (West
 Clean, laundry service — contact: Abu Sultan) before any further build
 work, pricing conversation, or partnership commitment.
 
-Four read-only scenarios are built and verified against West Clean's
+Five read-only scenarios are built and verified against West Clean's
 real production admin panel (AdminDashboardCheck, AdminOverviewCheck,
-AdminOrdersCheck, AdminUsersCheck). They must run daily and unattended
-for a week so real pass/fail data can be collected before talking to the
-client again.
+AdminOrdersCheck, AdminUsersCheck, AdminOrderDetailCheck — the last one
+inverted, tracking a known bug rather than health). They are now
+actually registered as daily Hangfire recurring jobs (fixed 2026-08-13 —
+being manually inserted via SQL had left them registered on paper but
+never actually scheduled), so real pass/fail data starts accumulating
+tonight, unattended, ahead of talking to the client again.
 
 Hard rule, permanent, not just for this week: scheduled/automated checks
 are READ-ONLY, always. Never click Edit, Save, Delete, or any

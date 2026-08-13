@@ -6,6 +6,8 @@ import '../api/models/site_response.dart';
 import '../auth/auth_controller.dart';
 import '../sites/sites_controller.dart';
 import '../sites/sites_provider.dart';
+import '../theme/app_theme.dart';
+import '../widgets/wordmark.dart';
 import 'add_site_dialog.dart';
 
 class SitesListScreen extends ConsumerWidget {
@@ -17,7 +19,7 @@ class SitesListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SiteWatch'),
+        title: const SiteWatchWordmark(),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -117,17 +119,23 @@ class _SitesListView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(AppSpacing.md),
       itemCount: sites.length,
       itemBuilder: (context, index) {
         final site = sites[index];
-        return ListTile(
-          title: Text(site.name),
-          subtitle: Text('${site.url} • ${site.isActive ? 'Active' : 'Inactive'}'),
-          onTap: () => context.push('/sites/${site.id}', extra: site),
-          trailing: IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete',
-            onPressed: () => _confirmDelete(context, ref, site),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: Card(
+            child: ListTile(
+              title: Text(site.name),
+              subtitle: Text('${site.url} • ${site.isActive ? 'Active' : 'Inactive'}'),
+              onTap: () => context.push('/sites/${site.id}', extra: site),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete',
+                onPressed: () => _confirmDelete(context, ref, site),
+              ),
+            ),
           ),
         );
       },
