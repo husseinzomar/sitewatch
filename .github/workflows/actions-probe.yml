@@ -1,0 +1,11 @@
+name: Actions Probe
+
+on:
+  push:
+    branches: [actions-probe]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "GitHub Actions is working"
