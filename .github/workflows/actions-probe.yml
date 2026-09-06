@@ -2,7 +2,7 @@ name: Actions Probe
 
 on:
   push:
-    branches: [actions-probe]
+    branches: [main]
 
 jobs:
   probe:
