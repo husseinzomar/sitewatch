@@ -1,83 +1,70 @@
 # SiteWatch
 
-Minimal API that proves Playwright Chromium works inside a container.
+A website monitoring app. Register, add a site, and SiteWatch runs scheduled browser checks with Playwright, stores the results and screenshots, and can send alerts.
 
-## Prerequisites
+- **Backend:** ASP.NET Core Minimal API (.NET 10), C#
+- **Browser checks:** Microsoft.Playwright (Chromium)
+- **Database and jobs:** PostgreSQL with EF Core, Hangfire for recurring checks
+- **Auth:** JWT bearer tokens, BCrypt password hashing
+- **Alerts and storage:** Resend email alerts and R2 screenshot storage (null implementations when not configured)
+- **Frontend:** Flutter Web
+- **Deploy:** Docker image, Railway
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) — Windows install: `winget install Microsoft.DotNet.SDK.10`
-- [PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows) (pwsh) — needed to run `playwright.ps1`; install with `winget install Microsoft.PowerShell`
-  - **Alternative (no pwsh required):** the NuGet package bundles `node.exe` — see the install step below
-- Docker Desktop (for container builds)
-- [Railway CLI](https://docs.railway.app/develop/cli) (for deployment)
+## Architecture
+
+```
+src/
+  SiteWatch.Api      HTTP endpoints, auth, Hangfire setup
+  SiteWatch.Core     Entities (User, Site, Check, CheckResult) and interfaces
+  SiteWatch.Infra    EF Core + migrations, PlaywrightCheckRunner, alert sender, screenshot store, password hasher
+web/                 Flutter Web client
+Dockerfile
+```
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | health check |
+| GET | `/browser-check` | confirms Playwright Chromium works in the container |
+| POST | `/auth/register`, `/auth/login` | create account, get JWT |
+| GET | `/me` | current user |
+| POST / GET | `/sites` | add a site, list sites |
+| GET / DELETE | `/sites/{id}` | site details, remove a site |
+| GET | `/sites/{id}/results` | check history |
+| GET | `/sites/{id}/results/{resultId}/screenshot` | screenshot of a check |
+| POST | `/sites/{id}/run-check` | run a check now |
 
 ## Run locally
 
+Prerequisites: .NET 10 SDK, PostgreSQL, Flutter SDK, PowerShell 7+ (or the bundled node option below), Docker Desktop for container builds.
+
+Configuration needed: `ConnectionStrings:Postgres` and `Jwt:Key` (required). `Resend:ApiKey` is optional.
+
 ```bash
-# 1. Build the project
 dotnet build
-
-# 2. Install Playwright's Chromium browser (one-time)
-# Option A — if pwsh (PowerShell 7+) is installed:
-pwsh src/SiteWatch.Api/bin/Debug/net10.0/playwright.ps1 install chromium
-
-# Option B — no pwsh required (uses node.exe bundled in the NuGet package):
-$node = "$env:USERPROFILE\.nuget\packages\microsoft.playwright\1.61.0\.playwright\node\win32_x64\node.exe"
-$cli  = "$env:USERPROFILE\.nuget\packages\microsoft.playwright\1.61.0\.playwright\package\cli.js"
-& $node $cli install chromium
-
-# 3. Run
-dotnet run --project src/SiteWatch.Api
+pwsh src/SiteWatch.Api/bin/Debug/net10.0/playwright.ps1 install chromium   # one-time
+dotnet run --project src/SiteWatch.Api                                       # API on :5129
+cd web && flutter run -d chrome --web-port=5000                              # Flutter Web
 ```
 
-Endpoints:
-- `GET http://localhost:5000/health`
-- `GET http://localhost:5000/browser-check`
+The Flutter dev port must be 5000: the API's dev CORS policy allows only `http://localhost:5000`.
 
-## Running locally (API + Flutter Web)
+## Docker
 
 ```bash
-# Terminal 1 — API (port 5129)
-dotnet run --project src/SiteWatch.Api
-
-# Terminal 2 — Flutter Web (port 5000)
-cd web
-flutter run -d chrome --web-port=5000
-```
-
-The Flutter dev port is fixed at 5000 — the API's dev-only CORS policy
-is bound to `http://localhost:5000` specifically (not a wildcard), so
-running on a different port will get CORS-rejected by the browser.
-
-## Build and test the Docker image locally
-
-```bash
-# Build
 docker build -t sitewatch .
-
-# Run
 docker run --rm -p 8080:8080 -e PORT=8080 sitewatch
-
-# Smoke-test (separate terminal)
 curl http://localhost:8080/health
 curl http://localhost:8080/browser-check
 ```
 
-> **Image size note:** The final image is based on `mcr.microsoft.com/playwright/dotnet:v1.61.0-noble`,
-> which includes the .NET 10 SDK and all three Playwright browsers. Expect ~2–3 GB on disk.
-> Railway's build cache makes subsequent deploys faster.
+The image is based on `mcr.microsoft.com/playwright/dotnet:v1.61.0-noble` (about 2-3 GB).
 
 ## Deploy to Railway
 
 ```bash
-# First-time setup
 railway login
-railway init        # run inside the SiteWatch folder; choose "Empty Project"
-
-# Deploy
+railway init
 railway up
-
-# View logs
-railway logs
 ```
-
-Railway auto-detects the `Dockerfile` and injects the `PORT` environment variable at runtime.
